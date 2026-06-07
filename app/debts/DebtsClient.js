@@ -3,12 +3,14 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import Shell from '@/components/Shell';
-import { inr, inrShort, fmtDate, fmtMonthYear, monthlyInterest, monthsElapsed, statusColor, statusLabel } from '@/lib/format';
+import { inr, inrShort, fmtDate, fmtMonthYear, statusColor, statusLabel } from '@/lib/format';
+import { getAccruedMonthsCount } from '@/lib/debtInterest';
 
 export default function DebtsClient({ user }) {
   const [debts, setDebts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('all'); // all | active | cleared
+  const [search, setSearch] = useState('');
 
   useEffect(() => {
     fetch('/api/debts')
@@ -16,9 +18,13 @@ export default function DebtsClient({ user }) {
       .then(d => { setDebts(d.debts || []); setLoading(false); });
   }, []);
 
-  const filtered = filter === 'all' ? debts :
-    filter === 'active' ? debts.filter(d => d.status === 'active') :
-    debts.filter(d => d.status === 'cleared');
+  const filtered = debts
+    .filter(d => filter === 'all' ? true : filter === 'active' ? d.status === 'active' : d.status === 'cleared')
+    .filter(d => {
+      const term = search.trim().toLowerCase();
+      if (!term) return true;
+      return d.lender_name?.toLowerCase().includes(term) || d.notes?.toLowerCase().includes(term);
+    });
 
   return (
     <Shell user={user}>
@@ -28,6 +34,16 @@ export default function DebtsClient({ user }) {
           <Link href="/debts/new" className="btn-primary py-1.5 px-3 rounded-lg text-xs font-medium">
             + Add
           </Link>
+        </div>
+
+        <div className="mb-4">
+          <input
+            type="search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search lender or notes"
+            className="field-input"
+          />
         </div>
 
         {/* Filter tabs */}
@@ -60,11 +76,9 @@ export default function DebtsClient({ user }) {
         {!loading && filtered.length > 0 && (
           <div className="space-y-3">
             {filtered.map(d => {
-              const monthly = monthlyInterest(d.current_principal, d.interest_rate);
-              const months = monthsElapsed(d.start_date);
-              const grossInterest = monthly * months;
-              const unpaidInterest = Math.max(0, grossInterest - Number(d.total_interest_paid));
+              const unpaidInterest = Number(d.unpaid_interest || 0);
               const totalOwed = Number(d.current_principal) + unpaidInterest;
+              const interestMonths = getAccruedMonthsCount(d.interest_start_month, d.interest_to_month);
 
               return (
                 <Link key={d.id} href={`/debts/${d.id}`}
@@ -84,13 +98,20 @@ export default function DebtsClient({ user }) {
                     </div>
                     <div className="text-right flex-shrink-0">
                       <p className="text-sm font-medium">{inrShort(d.current_principal)}</p>
-                      <p className="text-[11px] text-danger">{inrShort(monthly)}/mo interest</p>
+                      <p className="text-[11px] text-danger">{inrShort(d.current_monthly_interest)}/mo interest</p>
                     </div>
                   </div>
 
                   <div className="mt-3 pt-3 border-t border-edge flex gap-4 text-[11px] text-ink-mute">
                     <span>Paid: <span className="text-mint-600 font-medium">{inr(d.total_paid)}</span></span>
-                    <span>Unpaid interest: <span className="text-danger font-medium">{inr(unpaidInterest)}</span>{unpaidInterest > 0 && <span className="text-ink-mute"> (from {fmtMonthYear(d.start_date)})</span>}</span>
+                    <span>
+                      Unpaid interest: <span className="text-danger font-medium">{inr(unpaidInterest)}</span>
+                      {unpaidInterest > 0 && d.interest_start_month && d.interest_to_month && (
+                        <span className="text-ink-mute">
+                          {' '}({fmtMonthYear(d.interest_start_month)} – {fmtMonthYear(d.interest_to_month)} · {interestMonths} mo)
+                        </span>
+                      )}
+                    </span>
                     <span className="ml-auto">Total owed: <span className="text-ink font-medium">{inr(totalOwed)}</span></span>
                   </div>
                 </Link>

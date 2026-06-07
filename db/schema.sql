@@ -57,3 +57,16 @@ CREATE TABLE IF NOT EXISTS debt_payments (
 );
 
 CREATE INDEX IF NOT EXISTS idx_payments_debt ON debt_payments(debt_id);
+
+-- ---------- Debt Rate Changes ----------
+-- Preserves historical interest rate changes month by month.
+CREATE TABLE IF NOT EXISTS debt_rate_changes (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  debt_id UUID NOT NULL REFERENCES debts(id) ON DELETE CASCADE,
+  effective_month DATE NOT NULL,
+  interest_rate NUMERIC(6,3) NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_debt_rate_changes_debt
+  ON debt_rate_changes(debt_id, effective_month);

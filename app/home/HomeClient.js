@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import Shell from '@/components/Shell';
-import { inr, inrShort, fmtDate, monthlyInterest, monthsElapsed, statusColor, statusLabel } from '@/lib/format';
+import { inr, inrShort, fmtDate } from '@/lib/format';
 
 export default function HomeClient({ user }) {
   const [debts, setDebts] = useState([]);
@@ -19,16 +19,10 @@ export default function HomeClient({ user }) {
   const clearedDebts = debts.filter(d => d.status === 'cleared');
 
   const totalPrincipal = activeDebts.reduce((s, d) => s + Number(d.current_principal), 0);
-  const totalMonthlyInterest = activeDebts.reduce((s, d) => s + monthlyInterest(d.current_principal, d.interest_rate), 0);
+  const totalMonthlyInterest = activeDebts.reduce((s, d) => s + Number(d.current_monthly_interest || 0), 0);
   const totalPaid = debts.reduce((s, d) => s + Number(d.total_paid), 0);
 
-  // Accumulated unpaid interest across all active debts
-  const totalAccumulated = activeDebts.reduce((s, d) => {
-    const months = monthsElapsed(d.start_date);
-    const gross = monthlyInterest(d.current_principal, d.interest_rate) * months;
-    const interestPaid = Number(d.total_interest_paid);
-    return s + Math.max(0, gross - interestPaid);
-  }, 0);
+  const totalAccumulated = activeDebts.reduce((s, d) => s + Number(d.unpaid_interest || 0), 0);
 
   const empty = !loading && debts.length === 0;
 
@@ -134,7 +128,6 @@ export default function HomeClient({ user }) {
                 <Link href="/debts" className="text-xs text-sky-600">see all</Link>
               </div>
               {activeDebts.slice(0, 4).map(d => {
-                const monthly = monthlyInterest(d.current_principal, d.interest_rate);
                 return (
                   <Link key={d.id} href={`/debts/${d.id}`}
                     className="flex items-center justify-between py-2.5 border-b border-edge last:border-b-0 hover:bg-paper-tint/50 -mx-2 px-2 rounded transition">
@@ -146,7 +139,7 @@ export default function HomeClient({ user }) {
                     </div>
                     <div className="text-right ml-2 flex-shrink-0">
                       <p className="text-xs font-medium">{inrShort(d.current_principal)}</p>
-                      <p className="text-[10px] text-danger mt-0.5">{inrShort(monthly)}/mo</p>
+                      <p className="text-[10px] text-danger mt-0.5">{inrShort(d.current_monthly_interest)}/mo</p>
                     </div>
                   </Link>
                 );

@@ -5,7 +5,8 @@ import { useRouter } from 'next/navigation';
 import Shell from '@/components/Shell';
 import { toast } from '@/components/Toast';
 import { appConfirm } from '@/components/ConfirmDialog';
-import { inr, inrShort, inrRaw, fmtDate, fmtMonthYear, monthlyInterest, monthsElapsed, statusColor, statusLabel } from '@/lib/format';
+import { inr, inrShort, inrRaw, fmtDate, fmtMonthYear, statusColor, statusLabel } from '@/lib/format';
+import { getAccruedMonthsCount, sumInterestForMonthRange } from '@/lib/debtInterest';
 
 const PAYMENT_TYPES = [
   { value: 'interest',   label: 'Interest payment' },
@@ -47,7 +48,14 @@ export default function DebtDetailClient({ user, debtId }) {
 
   // Edit debt form
   const [showEdit, setShowEdit] = useState(false);
-  const [eForm, setEForm] = useState({ lender_name: '', principal: '', interest_rate: '', target_date: '', notes: '' });
+  const [eForm, setEForm] = useState({
+    lender_name: '',
+    principal: '',
+    interest_rate: '',
+    rate_effective_month: new Date().toISOString().slice(0, 7),
+    target_date: '',
+    notes: '',
+  });
   const [eSaving, setESaving] = useState(false);
   const [eError, setEError] = useState('');
 
@@ -62,6 +70,7 @@ export default function DebtDetailClient({ user, debtId }) {
         lender_name: dr.debt.lender_name || '',
         principal: dr.debt.principal || '',
         interest_rate: dr.debt.interest_rate || '',
+        rate_effective_month: new Date().toISOString().slice(0, 7),
         target_date: dr.debt.target_date ? dr.debt.target_date.slice(0, 10) : '',
         notes: dr.debt.notes || '',
       });
@@ -78,10 +87,9 @@ export default function DebtDetailClient({ user, debtId }) {
   // When month range changes, auto-fill amount
   useEffect(() => {
     if (!multiMonth || !rangeFrom || !rangeTo || !debt) return;
-    const n = monthsInRange(rangeFrom, rangeTo);
-    if (n <= 0) return;
-    const monthly = monthlyInterest(debt.current_principal, debt.interest_rate);
-    setPForm(f => ({ ...f, amount: String(Math.round(monthly * n)) }));
+    const amount = sumInterestForMonthRange(debt.interest_months || [], rangeFrom, rangeTo);
+    if (amount <= 0) return;
+    setPForm(f => ({ ...f, amount: String(Math.round(amount)) }));
   }, [multiMonth, rangeFrom, rangeTo, debt]);
 
   const handlePaymentSubmit = async (e) => {
@@ -167,6 +175,7 @@ export default function DebtDetailClient({ user, debtId }) {
           lender_name: eForm.lender_name,
           principal: eForm.principal,
           interest_rate: eForm.interest_rate,
+          rate_effective_month: eForm.rate_effective_month,
           target_date: eForm.target_date || null,
           notes: eForm.notes || null,
         }),
@@ -224,10 +233,8 @@ export default function DebtDetailClient({ user, debtId }) {
     ctx.fillText(statusText, 20, 112);
 
     // Stats
-    const months = monthsElapsed(debt.start_date);
-    const monthly = monthlyInterest(debt.current_principal, debt.interest_rate);
-    const grossInterest = monthly * months;
-    const unpaid = Math.max(0, grossInterest - Number(debt.total_interest_paid || 0));
+    const monthly = Number(debt.current_monthly_interest || 0);
+    const unpaid = Number(debt.unpaid_interest || 0);
     const totalOwed = Number(debt.current_principal) + unpaid;
 
     const stats = [
@@ -324,10 +331,9 @@ export default function DebtDetailClient({ user, debtId }) {
     );
   }
 
-  const months = monthsElapsed(debt.start_date);
-  const monthly = monthlyInterest(debt.current_principal, debt.interest_rate);
-  const grossInterest = monthly * months;
-  const unpaidInterest = Math.max(0, grossInterest - Number(debt.total_interest_paid || 0));
+  const months = getAccruedMonthsCount(debt.interest_start_month, debt.interest_to_month);
+  const monthly = Number(debt.current_monthly_interest || 0);
+  const unpaidInterest = Number(debt.unpaid_interest || 0);
   const totalOwed = Number(debt.current_principal) + unpaidInterest;
 
   // Bar chart data for monthly breakdown (last 6 months)
@@ -402,6 +408,17 @@ export default function DebtDetailClient({ user, debtId }) {
                 <input type="number" inputMode="decimal" min="0" step="0.01"
                   value={eForm.interest_rate}
                   onChange={e => setE('interest_rate', e.target.value)} required className="field-input" />
+                <p className="text-[10px] text-ink-mute mt-1">New rate will be applied from the selected month onward. Older pending interest stays unchanged.</p>
+              </div>
+              <div>
+                <label className="block text-xs text-ink-soft mb-1.5">New rate effective from</label>
+                <input
+                  type="month"
+                  value={eForm.rate_effective_month}
+                  max={new Date().toISOString().slice(0, 7)}
+                  onChange={e => setE('rate_effective_month', e.target.value)}
+                  className="field-input"
+                />
               </div>
               <div>
                 <label className="block text-xs text-ink-soft mb-1.5">Target date <span className="text-ink-mute">(optional)</span></label>
@@ -451,7 +468,11 @@ export default function DebtDetailClient({ user, debtId }) {
             <p className="text-[11px] text-ink-mute">Unpaid interest</p>
             <p className="text-base font-medium mt-1 text-danger">{inr(unpaidInterest)}</p>
             <p className="text-[10px] text-ink-mute">
-              {fmtMonthYear(debt.start_date)} – {fmtMonthYear(new Date())} ({months} mo)
+              {debt.interest_start_month && debt.interest_to_month
+                ? `${fmtMonthYear(debt.interest_start_month)} – ${fmtMonthYear(debt.interest_to_month)} (${months} mo)`
+                : debt.interest_start_month
+                  ? `Starts from ${fmtMonthYear(debt.interest_start_month)}`
+                  : 'No accrued interest yet'}
             </p>
           </div>
           <div className="bg-paper-card border border-edge rounded-xl p-3.5 bg-danger/5 border-danger/20">
@@ -459,6 +480,36 @@ export default function DebtDetailClient({ user, debtId }) {
             <p className="text-base font-medium mt-1 text-danger">{inr(totalOwed)}</p>
           </div>
         </div>
+
+        {debt.interest_periods?.length > 0 && (
+          <section className="bg-paper-card border border-edge rounded-2xl p-4 md:p-5">
+            <h2 className="text-sm font-medium mb-3">Interest timeline</h2>
+            <div className="space-y-3">
+              {debt.interest_periods.map((period, index) => (
+                <div key={`${period.from_month}-${period.to_month}-${index}`} className="rounded-xl border border-edge p-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-xs font-medium">
+                        {fmtMonthYear(period.from_month)}
+                        {period.from_month !== period.to_month ? ` – ${fmtMonthYear(period.to_month)}` : ''}
+                      </p>
+                      <p className="text-[11px] text-ink-mute mt-1">
+                        {period.months} mo · {inr(period.principal)} @ {period.interest_rate}% /mo
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-xs text-ink-mute">Pending</p>
+                      <p className="text-sm font-medium text-danger">{inr(period.unpaid_interest)}</p>
+                    </div>
+                  </div>
+                  {period.paid_interest > 0 && (
+                    <p className="text-[11px] text-mint-600 mt-2">Interest paid already: {inr(period.paid_interest)}</p>
+                  )}
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
 
         {/* Bar chart visual */}
         <div className="bg-paper-card border border-edge rounded-2xl p-4 md:p-5">
@@ -571,9 +622,10 @@ export default function DebtDetailClient({ user, debtId }) {
                 onChange={e => setP('amount', e.target.value)} required className="field-input" />
               {multiMonth && rangeFrom && rangeTo && (() => {
                 const n = monthsInRange(rangeFrom, rangeTo);
+                const amount = sumInterestForMonthRange(debt.interest_months || [], rangeFrom, rangeTo);
                 return n > 0 ? (
                   <p className="text-[11px] text-ink-mute mt-1">
-                    {n} month{n > 1 ? 's' : ''} × {inr(monthly)} = <span className="text-danger font-medium">{inr(monthly * n)}</span>
+                    {n} month{n > 1 ? 's' : ''} total = <span className="text-danger font-medium">{inr(amount)}</span>
                   </p>
                 ) : null;
               })()}
@@ -668,7 +720,7 @@ export default function DebtDetailClient({ user, debtId }) {
 📉 Current bal : ${inr(debt.current_principal)}
 📈 Interest    : ${debt.interest_rate}% /month (${inr(monthly)}/mo)
 ✅ Total paid  : ${inr(debt.total_paid || 0)}
-⚠️  Unpaid int  : ${inr(unpaidInterest)} (${fmtMonthYear(debt.start_date)} – ${fmtMonthYear(new Date())}, ${months} mo)
+⚠️  Unpaid int  : ${inr(unpaidInterest)}${debt.interest_start_month && debt.interest_to_month ? ` (${fmtMonthYear(debt.interest_start_month)} – ${fmtMonthYear(debt.interest_to_month)}, ${months} mo)` : ''}
 🏦 Total owed  : ${inr(totalOwed)}
 📊 Status      : ${statusLabel(debt.status)}
 ━━━━━━━━━━━━━━━━━━━━━━━
