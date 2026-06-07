@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Shell from '@/components/Shell';
 import { toast } from '@/components/Toast';
-import { inr, inrShort, fmtDate, monthlyInterest, monthsElapsed, statusColor, statusLabel } from '@/lib/format';
+import { inr, inrShort, inrRaw, fmtDate, monthlyInterest, monthsElapsed, statusColor, statusLabel } from '@/lib/format';
 
 const PAYMENT_TYPES = [
   { value: 'interest',   label: 'Interest payment' },
@@ -100,7 +100,7 @@ export default function DebtDetailClient({ user, debtId }) {
 
   // Share as image using Canvas API
   const handleShare = async () => {
-    if (!debt) return;
+    if (!debt) { toast('No debt data to share.', 'error'); return; }
     const canvas = document.createElement('canvas');
     const W = 640, H = 480;
     canvas.width = W * 2;
@@ -372,7 +372,7 @@ export default function DebtDetailClient({ user, debtId }) {
               <div>
                 <label className="block text-xs text-ink-soft mb-1.5">Amount (₹)<span className="text-danger ml-0.5">*</span></label>
                 <input type="number" inputMode="numeric" min="1" step="1"
-                  placeholder={inr(monthly).replace('₹', '')}
+                  placeholder={inrRaw(monthly)}
                   value={pForm.amount}
                   onChange={e => setP('amount', e.target.value)} required className="field-input" />
               </div>
@@ -477,7 +477,7 @@ export default function DebtDetailClient({ user, debtId }) {
             </button>
           </div>
           <div className="font-mono text-xs bg-paper-tint rounded-xl p-3 whitespace-pre-wrap text-ink-soft select-all">
-{`📋 Debt Summary — ${debt.lender_name}
+{`📋 Debt Summary
 ━━━━━━━━━━━━━━━━━━━━━━━
 👤 Lender      : ${debt.lender_name}
 📅 Since       : ${fmtDate(debt.start_date)}${debt.target_date ? '\n🎯 Target      : ' + fmtDate(debt.target_date) : ''}

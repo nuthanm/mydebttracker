@@ -32,8 +32,10 @@ export default function HomeClient({ user }) {
 
   const empty = !loading && debts.length === 0;
 
-  // Bar chart data: last 6 debts by principal
-  const chartDebts = [...activeDebts].slice(0, 6);
+  // Bar chart data: top 6 active debts by current principal (largest first)
+  const chartDebts = [...activeDebts]
+    .sort((a, b) => Number(b.current_principal) - Number(a.current_principal))
+    .slice(0, 6);
   const maxPrincipal = Math.max(...chartDebts.map(d => Number(d.current_principal)), 1);
 
   return (

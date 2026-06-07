@@ -16,14 +16,30 @@ export async function DELETE(req, { params }) {
   const p = payment[0];
   await sql`DELETE FROM debt_payments WHERE id = ${params.paymentId}`;
 
-  // Reverse principal reduction if applicable
-  if (p.payment_type === 'principal') {
-    const newPrincipal = Math.min(Number(debt[0].principal), Number(debt[0].current_principal) + Number(p.amount));
-    await sql`UPDATE debts SET current_principal = ${newPrincipal} WHERE id = ${params.id}`;
-  } else if (p.payment_type === 'clearance') {
-    // Reactivate debt and restore principal
-    const newPrincipal = Math.min(Number(debt[0].principal), Number(debt[0].current_principal) + Number(p.amount));
-    await sql`UPDATE debts SET current_principal = ${newPrincipal}, status = 'active' WHERE id = ${params.id}`;
+  // Recalculate current_principal from all remaining principal payments
+  // to ensure correctness regardless of deletion order.
+  if (p.payment_type === 'principal' || p.payment_type === 'clearance') {
+    const remaining = await sql`
+      SELECT COALESCE(SUM(amount), 0) AS total_repaid
+      FROM debt_payments
+      WHERE debt_id = ${params.id}
+        AND payment_type IN ('principal', 'clearance')
+    `;
+    const totalRepaid = Number(remaining[0].total_repaid);
+    const newPrincipal = Math.max(0, Number(debt[0].principal) - totalRepaid);
+
+    // Only keep debt cleared if a clearance payment still exists
+    const clearanceLeft = await sql`
+      SELECT COUNT(*) AS cnt FROM debt_payments
+      WHERE debt_id = ${params.id} AND payment_type = 'clearance'
+    `;
+    const newStatus = Number(clearanceLeft[0].cnt) > 0 ? 'cleared' : 'active';
+
+    await sql`
+      UPDATE debts
+      SET current_principal = ${newPrincipal}, status = ${newStatus}
+      WHERE id = ${params.id}
+    `;
   }
 
   return NextResponse.json({ ok: true });
