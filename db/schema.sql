@@ -36,6 +36,8 @@ CREATE TABLE IF NOT EXISTS debts (
   current_principal NUMERIC(14,2) NOT NULL,  -- reduces as principal is repaid
   interest_rate NUMERIC(6,3) NOT NULL,       -- monthly interest rate in %
   start_date DATE NOT NULL DEFAULT CURRENT_DATE,
+  category TEXT,                             -- optional category label (bank/family/etc.)
+  priority INTEGER,                          -- optional payoff priority (1 = highest)
   target_date DATE,                          -- optional target clearance date
   status TEXT NOT NULL DEFAULT 'active',     -- active | cleared
   notes TEXT,

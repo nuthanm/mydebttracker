@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Shell from '@/components/Shell';
 import { toast } from '@/components/Toast';
 import { appConfirm } from '@/components/ConfirmDialog';
+import { exportDebtWorkbook } from '@/lib/export';
 import { inr, inrShort, inrRaw, fmtDate, fmtMonthYear, statusColor, statusLabel } from '@/lib/format';
 import { getAccruedMonthsCount, sumInterestForMonthRange } from '@/lib/debtInterest';
 
@@ -54,6 +55,8 @@ export default function DebtDetailClient({ user, debtId }) {
     principal: '',
     interest_rate: '',
     rate_effective_month: currentMonth,
+    category: '',
+    priority: '',
     target_date: '',
     notes: '',
   });
@@ -72,6 +75,8 @@ export default function DebtDetailClient({ user, debtId }) {
         principal: dr.debt.principal || '',
         interest_rate: dr.debt.interest_rate || '',
         rate_effective_month: currentMonth,
+        category: dr.debt.category || '',
+        priority: dr.debt.priority ?? '',
         target_date: dr.debt.target_date ? dr.debt.target_date.slice(0, 10) : '',
         notes: dr.debt.notes || '',
       });
@@ -177,6 +182,8 @@ export default function DebtDetailClient({ user, debtId }) {
           principal: eForm.principal,
           interest_rate: eForm.interest_rate,
           rate_effective_month: eForm.rate_effective_month,
+          category: eForm.category || null,
+          priority: eForm.priority || null,
           target_date: eForm.target_date || null,
           notes: eForm.notes || null,
         }),
@@ -336,6 +343,13 @@ export default function DebtDetailClient({ user, debtId }) {
   const monthly = Number(debt.current_monthly_interest || 0);
   const unpaidInterest = Number(debt.unpaid_interest || 0);
   const totalOwed = Number(debt.current_principal) + unpaidInterest;
+  const detailTooltip = [
+    `Monthly interest: ${inr(monthly)}`,
+    `Interest paid: ${inr(debt.total_interest_paid || 0)}`,
+    `Principal paid: ${inr(debt.total_principal_paid || 0)}`,
+    `Unpaid interest: ${inr(unpaidInterest)}`,
+    `Total owed: ${inr(totalOwed)}`,
+  ].join('\n');
 
   // Bar chart data for monthly breakdown (last 6 months)
   const barMaxVal = Math.max(Number(debt.principal), Number(debt.total_paid || 0), 1);
@@ -352,6 +366,16 @@ export default function DebtDetailClient({ user, debtId }) {
               <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${statusColor(debt.status)}`}>
                 {statusLabel(debt.status)}
               </span>
+              {debt.category && (
+                <span className="text-[10px] px-2 py-0.5 rounded-full font-medium bg-sky-50 text-sky-600">
+                  {debt.category}
+                </span>
+              )}
+              {debt.priority != null && (
+                <span className="text-[10px] px-2 py-0.5 rounded-full font-medium bg-plum-50 text-plum-600">
+                  P{debt.priority}
+                </span>
+              )}
             </div>
             <p className="text-xs text-ink-mute mt-1">
               Since {fmtDate(debt.start_date)}
@@ -376,6 +400,22 @@ export default function DebtDetailClient({ user, debtId }) {
                 <path d="M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/>
               </svg>
             </button>
+            <button
+              onClick={() => {
+                try {
+                  exportDebtWorkbook({ debt, payments });
+                  toast('Debt export ready.');
+                } catch (err) {
+                  toast('Could not export debt.', 'error');
+                }
+              }}
+              className="w-9 h-9 rounded-xl border border-edge flex items-center justify-center text-ink-soft hover:bg-paper-tint transition"
+              title="Export Excel"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 3v12" /><path d="M7 10l5 5 5-5" /><path d="M5 21h14" />
+              </svg>
+            </button>
             <button onClick={handleDeleteDebt}
               className="w-9 h-9 rounded-xl border border-edge flex items-center justify-center text-danger hover:bg-danger/10 transition"
               title="Delete debt">
@@ -385,6 +425,13 @@ export default function DebtDetailClient({ user, debtId }) {
             </button>
           </div>
         </div>
+
+        {debt.urgency_status !== 'none' && (
+          <div className={`rounded-2xl border px-4 py-3 ${debt.urgency_status === 'overdue' ? 'bg-danger/10 border-danger/20 text-danger' : 'bg-honey-50 border-honey-600/20 text-honey-600'}`}>
+            <p className="text-sm font-medium">{debt.urgency_message}</p>
+            <p className="text-xs mt-1">Target date: {fmtDate(debt.target_date)}. Update the target or clear the debt to remove this alert.</p>
+          </div>
+        )}
 
         {/* Edit debt form */}
         {showEdit && (
@@ -422,9 +469,19 @@ export default function DebtDetailClient({ user, debtId }) {
                 />
               </div>
               <div>
-                <label className="block text-xs text-ink-soft mb-1.5">Target date <span className="text-ink-mute">(optional)</span></label>
-                <input type="date" value={eForm.target_date}
-                  onChange={e => setE('target_date', e.target.value)} className="field-input" />
+               <label className="block text-xs text-ink-soft mb-1.5">Category <span className="text-ink-mute">(optional)</span></label>
+               <input type="text" value={eForm.category}
+                 onChange={e => setE('category', e.target.value)} className="field-input" />
+              </div>
+              <div>
+               <label className="block text-xs text-ink-soft mb-1.5">Priority <span className="text-ink-mute">(optional)</span></label>
+               <input type="number" inputMode="numeric" min="1" max="10" step="1" value={eForm.priority}
+                 onChange={e => setE('priority', e.target.value)} className="field-input" />
+              </div>
+              <div>
+               <label className="block text-xs text-ink-soft mb-1.5">Target date <span className="text-ink-mute">(optional)</span></label>
+               <input type="date" value={eForm.target_date}
+                 onChange={e => setE('target_date', e.target.value)} className="field-input" />
               </div>
               <div className="col-span-2">
                 <label className="block text-xs text-ink-soft mb-1.5">Notes <span className="text-ink-mute">(optional)</span></label>
@@ -464,6 +521,14 @@ export default function DebtDetailClient({ user, debtId }) {
           <div className="bg-paper-card border border-edge rounded-xl p-3.5">
             <p className="text-[11px] text-ink-mute">Total paid so far</p>
             <p className="text-base font-medium mt-1 text-mint-600">{inr(debt.total_paid || 0)}</p>
+          </div>
+          <div className="bg-paper-card border border-edge rounded-xl p-3.5">
+            <p className="text-[11px] text-ink-mute">Category</p>
+            <p className="text-base font-medium mt-1">{debt.category || '—'}</p>
+          </div>
+          <div className="bg-paper-card border border-edge rounded-xl p-3.5">
+            <p className="text-[11px] text-ink-mute">Priority</p>
+            <p className="text-base font-medium mt-1">{debt.priority != null ? `P${debt.priority}` : '—'}</p>
           </div>
           <div className="bg-paper-card border border-edge rounded-xl p-3.5">
             <p className="text-[11px] text-ink-mute">Unpaid interest</p>
@@ -513,7 +578,7 @@ export default function DebtDetailClient({ user, debtId }) {
         )}
 
         {/* Bar chart visual */}
-        <div className="bg-paper-card border border-edge rounded-2xl p-4 md:p-5">
+        <div className="bg-paper-card border border-edge rounded-2xl p-4 md:p-5" title={detailTooltip}>
           <h2 className="text-sm font-medium mb-4">Overview</h2>
           <div className="flex items-end gap-4 h-28">
             {[
