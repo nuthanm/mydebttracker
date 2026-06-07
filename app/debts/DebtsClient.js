@@ -52,7 +52,7 @@ export default function DebtsClient({ user }) {
     .filter(d => {
       const term = search.trim().toLowerCase();
       if (!term) return true;
-      return [d.lender_name, d.notes, d.category, instrumentTagLabel(d.instrument_tag)]
+      return [d.lender_name, d.notes, d.category, d.instrument_tag, instrumentTagLabel(d.instrument_tag)]
         .filter(Boolean)
         .some((value) => value.toLowerCase().includes(term));
     });

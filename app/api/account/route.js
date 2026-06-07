@@ -7,6 +7,7 @@ export async function DELETE() {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   try {
+    // Related sessions/debts/payments/rate changes are removed by ON DELETE CASCADE constraints.
     await sql`DELETE FROM users WHERE id = ${user.id}`;
     await destroySession();
     return NextResponse.json({ ok: true });

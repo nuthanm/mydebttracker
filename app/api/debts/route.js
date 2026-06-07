@@ -16,8 +16,10 @@ import {
 
 function sortDebtsForList(left, right) {
   if (left.status !== right.status) return left.status === 'active' ? -1 : 1;
-  const interestDiff = Number(right.interest_rate || 0) - Number(left.interest_rate || 0);
-  if (interestDiff !== 0) return interestDiff;
+  if (left.status === 'active' && right.status === 'active') {
+    const interestDiff = Number(right.interest_rate || 0) - Number(left.interest_rate || 0);
+    if (interestDiff !== 0) return interestDiff;
+  }
   if (left.priority == null && right.priority != null) return 1;
   if (left.priority != null && right.priority == null) return -1;
   if (left.priority != null && right.priority != null && left.priority !== right.priority) {
@@ -107,7 +109,17 @@ export async function GET(req) {
       ORDER BY rc.effective_month ASC, rc.created_at ASC
     `,
     sql`
-      SELECT p.*, d.lender_name, d.category, d.instrument_tag
+      SELECT
+        p.id,
+        p.debt_id,
+        p.payment_date,
+        p.payment_type,
+        p.amount,
+        p.notes,
+        p.created_at,
+        d.lender_name,
+        d.category,
+        d.instrument_tag
       FROM debt_payments p
       INNER JOIN debts d ON d.id = p.debt_id
       WHERE d.user_id = ${user.id}
@@ -198,7 +210,7 @@ export async function POST(req) {
     const rateNum = parseFloat(interest_rate);
     const priorityNum = normalizeDebtPriority(priority);
     const categoryName = normalizeDebtCategory(category);
-    const instrumentTag = normalizeDebtInstrumentTag(instrument_tag);
+    const normalizedInstrumentTag = normalizeDebtInstrumentTag(instrument_tag);
     if (Number.isNaN(principalNum) || principalNum <= 0) {
       return NextResponse.json({ error: 'principal must be a positive number.' }, { status: 400 });
     }
@@ -208,7 +220,7 @@ export async function POST(req) {
     if (Number.isNaN(priorityNum)) {
       return NextResponse.json({ error: 'priority must be between 1 and 10.' }, { status: 400 });
     }
-    if (Number.isNaN(instrumentTag)) {
+    if (Number.isNaN(normalizedInstrumentTag)) {
       return NextResponse.json({ error: 'instrument_tag must be one of temp, short_term, long_term.' }, { status: 400 });
     }
 
@@ -223,7 +235,7 @@ export async function POST(req) {
         ${start_date},
         ${target_date || null},
         ${categoryName},
-        ${instrumentTag},
+        ${normalizedInstrumentTag},
         ${priorityNum},
         ${notes?.trim() || null}
       )

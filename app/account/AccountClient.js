@@ -41,7 +41,10 @@ export default function AccountClient({ user }) {
   };
 
   const handleDeleteAccount = async () => {
-    if (!await appConfirm('Delete account permanently? This will immediately remove your full data including debts and payment history. Export first if needed.')) return;
+    if (!await appConfirm(
+      'Delete account permanently? This action cannot be undone and will immediately remove all your data including debts and payment history.\n'
+      + 'Export your data first if you want to keep a copy.'
+    )) return;
     try {
       setDeleting(true);
       const res = await fetch('/api/account', { method: 'DELETE' });
@@ -97,7 +100,7 @@ export default function AccountClient({ user }) {
           <div className="bg-paper-card border border-danger/20 rounded-2xl p-4">
             <h2 className="text-sm font-medium text-danger">Delete account</h2>
             <p className="text-xs text-ink-mute mt-1.5 leading-relaxed">
-              Once you delete your account, your whole data is deleted immediately and cannot be recovered.
+              Once you delete your account, all your data is deleted immediately and cannot be recovered.
               If you want your records, export your data first and then delete the account.
             </p>
             <div className="mt-3 grid sm:grid-cols-2 gap-2">

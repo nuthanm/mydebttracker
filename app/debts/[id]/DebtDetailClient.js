@@ -359,14 +359,14 @@ export default function DebtDetailClient({ user, debtId }) {
   const monthly = Number(debt.current_monthly_interest || 0);
   const unpaidInterest = Number(debt.unpaid_interest || 0);
   const totalOwed = Number(debt.current_principal) + unpaidInterest;
-  const totalOwedWithCurrentMonth = totalOwed + monthly;
+  const payableThisMonth = totalOwed + monthly;
   const detailTooltip = [
     `Monthly interest: ${inr(monthly)}`,
     `Interest paid: ${inr(debt.total_interest_paid || 0)}`,
     `Principal paid: ${inr(debt.total_principal_paid || 0)}`,
     `Unpaid interest: ${inr(unpaidInterest)}`,
-    `Total owed (without current month): ${inr(totalOwed)}`,
-    `Payable with current month interest: ${inr(totalOwedWithCurrentMonth)}`,
+    `Total owed (excluding current month interest): ${inr(totalOwed)}`,
+    `Payable with current month interest: ${inr(payableThisMonth)}`,
   ].join('\n');
 
   // Bar chart data for monthly breakdown (last 6 months)
@@ -579,7 +579,7 @@ export default function DebtDetailClient({ user, debtId }) {
           </div>
           <div className="bg-paper-card border border-edge rounded-xl p-3.5 bg-danger/5 border-danger/20">
             <p className="text-[11px] text-danger">Payable this month</p>
-            <p className="text-base font-medium mt-1 text-danger">{inr(totalOwedWithCurrentMonth)}</p>
+            <p className="text-base font-medium mt-1 text-danger">{inr(payableThisMonth)}</p>
             <p className="text-[10px] text-ink-mute">
               {inr(totalOwed)} pending + {inr(monthly)} current month interest
             </p>
