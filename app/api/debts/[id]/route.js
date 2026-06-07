@@ -1,6 +1,15 @@
 import { NextResponse } from 'next/server';
 import { getCurrentUser } from '@/lib/auth';
 import { sql } from '@/lib/db';
+import {
+  calculateDebtInterestSummary,
+  compareEffectiveMonths,
+  ensureDebtRateChangesTable,
+  ensureInitialRateChange,
+  getCurrentMonth,
+  getFirstInterestMonth,
+  normalizeEffectiveMonth,
+} from '@/lib/debtInterest';
 
 export async function GET(req, { params }) {
   const user = await getCurrentUser();
@@ -21,7 +30,35 @@ export async function GET(req, { params }) {
   `;
 
   if (!rows.length) return NextResponse.json({ error: 'Not found.' }, { status: 404 });
-  return NextResponse.json({ debt: rows[0] });
+
+  await ensureDebtRateChangesTable(sql);
+
+  const [payments, rateChanges] = await Promise.all([
+    sql`
+      SELECT payment_date, payment_type, amount
+      FROM debt_payments
+      WHERE debt_id = ${params.id}
+      ORDER BY payment_date ASC, created_at ASC
+    `,
+    sql`
+      SELECT effective_month, interest_rate, created_at
+      FROM debt_rate_changes
+      WHERE debt_id = ${params.id}
+      ORDER BY effective_month ASC, created_at ASC
+    `,
+  ]);
+
+  const debt = {
+    ...rows[0],
+    ...calculateDebtInterestSummary({
+      debt: rows[0],
+      payments,
+      rateChanges,
+    }),
+    rate_changes: rateChanges,
+  };
+
+  return NextResponse.json({ debt });
 }
 
 export async function PATCH(req, { params }) {
@@ -30,11 +67,40 @@ export async function PATCH(req, { params }) {
 
   try {
     const body = await req.json();
-    const { lender_name, principal, interest_rate, target_date, notes, status } = body;
+    const { lender_name, principal, interest_rate, rate_effective_month, target_date, notes, status } = body;
 
     const existing = await sql`SELECT * FROM debts WHERE id = ${params.id} AND user_id = ${user.id} LIMIT 1`;
     if (!existing.length) return NextResponse.json({ error: 'Not found.' }, { status: 404 });
     const debt = existing[0];
+    const currentRate = Number(debt.interest_rate || 0);
+    const nextRate = interest_rate !== undefined ? parseFloat(interest_rate) : currentRate;
+
+    if (interest_rate !== undefined && (isNaN(nextRate) || nextRate < 0)) {
+      return NextResponse.json({ error: 'interest_rate must be a non-negative number.' }, { status: 400 });
+    }
+
+    const rateHasChanged = interest_rate !== undefined && nextRate !== currentRate;
+    let effectiveMonth = null;
+
+    if (rateHasChanged) {
+      effectiveMonth = normalizeEffectiveMonth(rate_effective_month);
+      if (!effectiveMonth) {
+        return NextResponse.json({ error: 'Provide a valid effective month for the new interest rate.' }, { status: 400 });
+      }
+
+      const firstInterestMonth = normalizeEffectiveMonth(getFirstInterestMonth(debt.start_date));
+      const currentMonth = normalizeEffectiveMonth(getCurrentMonth());
+      if (firstInterestMonth && compareEffectiveMonths(effectiveMonth, firstInterestMonth) < 0) {
+        return NextResponse.json(
+          { error: `Effective month cannot be earlier than ${(firstInterestMonth || '').slice(0, 7) || 'the first interest month'}.` },
+          { status: 400 }
+        );
+      }
+      if (currentMonth && compareEffectiveMonths(effectiveMonth, currentMonth) > 0) {
+        return NextResponse.json({ error: 'Effective month cannot be in the future.' }, { status: 400 });
+      }
+    }
+
     let rows;
     if (principal !== undefined) {
       const principalNum = parseFloat(principal);
@@ -62,7 +128,7 @@ export async function PATCH(req, { params }) {
           lender_name   = ${lender_name?.trim() ?? debt.lender_name},
           principal     = ${principalNum},
           current_principal = ${currentPrincipalValue},
-          interest_rate = ${interest_rate !== undefined ? parseFloat(interest_rate) : debt.interest_rate},
+          interest_rate = ${nextRate},
           target_date   = ${target_date !== undefined ? (target_date || null) : debt.target_date},
           notes         = ${notes?.trim() !== undefined ? (notes?.trim() || null) : debt.notes},
           status        = ${status ?? debt.status}
@@ -73,12 +139,22 @@ export async function PATCH(req, { params }) {
       rows = await sql`
         UPDATE debts SET
           lender_name   = ${lender_name?.trim() ?? debt.lender_name},
-          interest_rate = ${interest_rate !== undefined ? parseFloat(interest_rate) : debt.interest_rate},
+          interest_rate = ${nextRate},
           target_date   = ${target_date !== undefined ? (target_date || null) : debt.target_date},
           notes         = ${notes?.trim() !== undefined ? (notes?.trim() || null) : debt.notes},
           status        = ${status ?? debt.status}
         WHERE id = ${params.id} AND user_id = ${user.id}
         RETURNING *
+      `;
+    }
+
+    if (rateHasChanged) {
+      await ensureInitialRateChange(sql, debt);
+      await sql`
+        INSERT INTO debt_rate_changes (debt_id, effective_month, interest_rate)
+        VALUES (${params.id}, ${effectiveMonth}, ${nextRate})
+        ON CONFLICT (debt_id, effective_month)
+        DO UPDATE SET interest_rate = EXCLUDED.interest_rate
       `;
     }
     return NextResponse.json({ debt: rows[0] });

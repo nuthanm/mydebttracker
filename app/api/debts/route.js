@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getCurrentUser } from '@/lib/auth';
 import { sql } from '@/lib/db';
+import { calculateDebtInterestSummary, ensureDebtRateChangesTable, getFirstInterestMonth, normalizeEffectiveMonth } from '@/lib/debtInterest';
 
 export async function GET() {
   const user = await getCurrentUser();
@@ -20,7 +21,49 @@ export async function GET() {
     ORDER BY d.status ASC, d.created_at DESC
   `;
 
-  return NextResponse.json({ debts });
+  if (!debts.length) return NextResponse.json({ debts: [] });
+
+  await ensureDebtRateChangesTable(sql);
+
+  const [principalPayments, rateChanges] = await Promise.all([
+    sql`
+      SELECT p.debt_id, p.payment_date, p.payment_type, p.amount
+      FROM debt_payments p
+      INNER JOIN debts d ON d.id = p.debt_id
+      WHERE d.user_id = ${user.id}
+        AND p.payment_type IN ('principal', 'clearance')
+      ORDER BY p.payment_date ASC, p.created_at ASC
+    `,
+    sql`
+      SELECT rc.debt_id, rc.effective_month, rc.interest_rate, rc.created_at
+      FROM debt_rate_changes rc
+      INNER JOIN debts d ON d.id = rc.debt_id
+      WHERE d.user_id = ${user.id}
+      ORDER BY rc.effective_month ASC, rc.created_at ASC
+    `,
+  ]);
+
+  const paymentsByDebt = principalPayments.reduce((map, payment) => {
+    if (!map[payment.debt_id]) map[payment.debt_id] = [];
+    map[payment.debt_id].push(payment);
+    return map;
+  }, {});
+  const rateChangesByDebt = rateChanges.reduce((map, change) => {
+    if (!map[change.debt_id]) map[change.debt_id] = [];
+    map[change.debt_id].push(change);
+    return map;
+  }, {});
+
+  const enrichedDebts = debts.map((debt) => ({
+    ...debt,
+    ...calculateDebtInterestSummary({
+      debt,
+      payments: paymentsByDebt[debt.id] || [],
+      rateChanges: rateChangesByDebt[debt.id] || [],
+    }),
+  }));
+
+  return NextResponse.json({ debts: enrichedDebts });
 }
 
 export async function POST(req) {
@@ -57,6 +100,16 @@ export async function POST(req) {
         ${notes?.trim() || null}
       )
       RETURNING *
+    `;
+
+    await ensureDebtRateChangesTable(sql);
+    await sql`
+      INSERT INTO debt_rate_changes (debt_id, effective_month, interest_rate)
+      VALUES (
+        ${rows[0].id},
+        ${normalizeEffectiveMonth(getFirstInterestMonth(start_date)) || normalizeEffectiveMonth()},
+        ${rateNum}
+      )
     `;
 
     return NextResponse.json({ debt: rows[0] }, { status: 201 });
