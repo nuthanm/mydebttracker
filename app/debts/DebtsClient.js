@@ -129,12 +129,18 @@ export default function DebtsClient({ user }) {
 
       const failures = [];
       responses.forEach((response, index) => {
-        if (!response.ok) failures.push(selectedIds[index]);
+        if (!response.ok) {
+          const failedId = selectedIds[index];
+          const debtName = debts.find((debt) => debt.id === failedId)?.lender_name || failedId;
+          failures.push({ name: debtName, status: response.status });
+        }
       });
       const failed = failures.length;
       if (failed > 0) {
-        console.error('Bulk debt update failed for ids:', failures);
-        toast(`Updated ${selectedIds.length - failed}/${selectedIds.length} debts.`, 'error');
+        console.error('Bulk debt update failed for:', failures);
+        const failedLabel = failures.slice(0, 2).map((entry) => `${entry.name} (${entry.status})`).join(', ');
+        toast(`Updated ${selectedIds.length - failed}/${selectedIds.length} debts.`, failed === selectedIds.length ? 'error' : 'info');
+        toast(`Failed: ${failedLabel}${failed > 2 ? ` +${failed - 2} more` : ''}`, 'error');
       } else {
         toast(`Updated ${selectedIds.length} debts.`);
       }
@@ -240,7 +246,7 @@ export default function DebtsClient({ user }) {
                 <option key={value} value={value}>P{value}</option>
               ))}
             </select>
-            <p className="text-xs text-ink-mute" aria-live="polite" aria-label="Bulk selection summary">
+            <p className="text-xs text-ink-mute" aria-live="polite" aria-label="Selected items count and priority filter status">
               {selectedIds.length} selected · {priorityLabel(priorityFilter)}
             </p>
             <button

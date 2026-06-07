@@ -28,6 +28,7 @@ function pct(value, max) {
 function todayInput() {
   return new Date().toISOString().slice(0, 10);
 }
+const DEFAULT_RANGE_DATE = todayInput();
 
 function pieGradient(items, key) {
   const total = items.reduce((sum, item) => sum + Number(item[key] || 0), 0);
@@ -54,8 +55,8 @@ export default function HomeClient({ user }) {
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [tagFilter, setTagFilter] = useState('all');
   const [priorityFilter, setPriorityFilter] = useState('all');
-  const [fromDate, setFromDate] = useState(() => todayInput());
-  const [toDate, setToDate] = useState(() => todayInput());
+  const [fromDate, setFromDate] = useState(DEFAULT_RANGE_DATE);
+  const [toDate, setToDate] = useState(DEFAULT_RANGE_DATE);
   const [insightView, setInsightView] = useState('current');
   const [exporting, setExporting] = useState(false);
   const [outflowExporting, setOutflowExporting] = useState(false);
@@ -103,11 +104,16 @@ export default function HomeClient({ user }) {
     () => activeDebts.reduce((sum, debt) => sum + Number(debt.total_interest_paid || 0), 0),
     [activeDebts]
   );
-  const totalPaidCombined = activeDebts.reduce((sum, debt) => sum + Number(debt.total_paid || 0), 0);
-  const totalOutstandingCombined = activeDebts.reduce((sum, debt) => sum + Number(debt.outstanding_total || 0), 0);
+  const combinedPaidVsOutstanding = useMemo(
+    () => activeDebts.reduce((acc, debt) => ({
+      paid: acc.paid + Number(debt.total_paid || 0),
+      outstanding: acc.outstanding + Number(debt.outstanding_total || 0),
+    }), { paid: 0, outstanding: 0 }),
+    [activeDebts]
+  );
   const paidVsOutstandingPct = Math.max(
     1,
-    Math.round((totalPaidCombined / Math.max(1, totalPaidCombined + totalOutstandingCombined)) * 100)
+    Math.round((combinedPaidVsOutstanding.paid / Math.max(1, combinedPaidVsOutstanding.paid + combinedPaidVsOutstanding.outstanding)) * 100)
   );
 
   const handleExport = async () => {
@@ -437,7 +443,7 @@ export default function HomeClient({ user }) {
             <div className="flex justify-between items-start mb-4 gap-3 flex-wrap">
               <div>
                 <h2 className="text-sm font-medium">Day-wise account outflow</h2>
-                <p className="text-[11px] text-ink-mute mt-1">By default this shows today&apos;s outflow. Change date filters above for another range.</p>
+                <p className="text-[11px] text-ink-mute mt-1">By default this shows today's outflow. Change date filters above for another range.</p>
               </div>
               <div className="flex items-center gap-2">
                 <span className="text-xs text-sky-600">{inr(dashboard.payment_range.total_outflow)} total</span>

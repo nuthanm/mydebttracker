@@ -49,7 +49,7 @@ export async function GET(req) {
     return NextResponse.json({ error: 'instrument_tag must be one of temp, short_term, long_term.' }, { status: 400 });
   }
   if (Number.isNaN(priority)) {
-    return NextResponse.json({ error: 'priority must be between 1 and 10.' }, { status: 400 });
+    return NextResponse.json({ error: 'priority must be a valid value.' }, { status: 400 });
   }
 
   const debts = await sql`
