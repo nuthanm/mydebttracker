@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getCurrentUser, destroySession, verifyPin, hashPin, validatePin, createSession } from '@/lib/auth';
+import { getCurrentUser, destroySession, verifyPin, hashPin, validatePin } from '@/lib/auth';
 import { sql } from '@/lib/db';
 
 export async function PATCH(req) {
@@ -30,8 +30,6 @@ export async function PATCH(req) {
 
     const pinHash = await hashPin(newPin);
     await sql`UPDATE users SET pin_hash = ${pinHash} WHERE id = ${user.id}`;
-    await sql`DELETE FROM sessions WHERE user_id = ${user.id}`;
-    await createSession(user.id);
     return NextResponse.json({ ok: true });
   } catch (err) {
     console.error('PATCH /api/account error', err);
