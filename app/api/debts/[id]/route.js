@@ -49,6 +49,12 @@ export async function PATCH(req, { params }) {
           AND payment_type IN ('principal', 'clearance')
       `;
       const totalRepaid = Number(repaidRows[0].total_repaid);
+      if (principalNum < totalRepaid) {
+        return NextResponse.json(
+          { error: `principal cannot be less than already repaid amount (${totalRepaid.toFixed(2)}).` },
+          { status: 400 }
+        );
+      }
       const currentPrincipalValue = Math.max(0, principalNum - totalRepaid);
 
       rows = await sql`
