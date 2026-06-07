@@ -146,13 +146,10 @@ export async function PATCH(req, { params }) {
     if (rateHasChanged) {
       await ensureInitialRateChange(sql, debt);
       await sql`
-        DELETE FROM debt_rate_changes
-        WHERE debt_id = ${params.id}
-          AND effective_month = ${effectiveMonth}
-      `;
-      await sql`
         INSERT INTO debt_rate_changes (debt_id, effective_month, interest_rate)
         VALUES (${params.id}, ${effectiveMonth}, ${nextRate})
+        ON CONFLICT (debt_id, effective_month)
+        DO UPDATE SET interest_rate = EXCLUDED.interest_rate
       `;
     }
     return NextResponse.json({ debt: rows[0] });

@@ -70,3 +70,6 @@ CREATE TABLE IF NOT EXISTS debt_rate_changes (
 
 CREATE INDEX IF NOT EXISTS idx_debt_rate_changes_debt
   ON debt_rate_changes(debt_id, effective_month);
+
+CREATE UNIQUE INDEX IF NOT EXISTS uniq_debt_rate_changes_month
+  ON debt_rate_changes(debt_id, effective_month);
