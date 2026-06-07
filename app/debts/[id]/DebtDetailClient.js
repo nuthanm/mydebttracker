@@ -25,6 +25,7 @@ function monthsInRange(fromYM, toYM) {
 export default function DebtDetailClient({ user, debtId }) {
   const router = useRouter();
   const shareRef = useRef(null);
+  const [currentMonth] = useState(() => new Date().toISOString().slice(0, 7));
 
   const [debt, setDebt] = useState(null);
   const [payments, setPayments] = useState([]);
@@ -52,7 +53,7 @@ export default function DebtDetailClient({ user, debtId }) {
     lender_name: '',
     principal: '',
     interest_rate: '',
-    rate_effective_month: new Date().toISOString().slice(0, 7),
+    rate_effective_month: currentMonth,
     target_date: '',
     notes: '',
   });
@@ -70,14 +71,14 @@ export default function DebtDetailClient({ user, debtId }) {
         lender_name: dr.debt.lender_name || '',
         principal: dr.debt.principal || '',
         interest_rate: dr.debt.interest_rate || '',
-        rate_effective_month: new Date().toISOString().slice(0, 7),
+        rate_effective_month: currentMonth,
         target_date: dr.debt.target_date ? dr.debt.target_date.slice(0, 10) : '',
         notes: dr.debt.notes || '',
       });
     }
     if (pr.payments) setPayments(pr.payments);
     setLoading(false);
-  }, [debtId]);
+  }, [currentMonth, debtId]);
 
   useEffect(() => { loadData(); }, [loadData]);
 
@@ -415,7 +416,7 @@ export default function DebtDetailClient({ user, debtId }) {
                 <input
                   type="month"
                   value={eForm.rate_effective_month}
-                  max={new Date().toISOString().slice(0, 7)}
+                  max={currentMonth}
                   onChange={e => setE('rate_effective_month', e.target.value)}
                   className="field-input"
                 />

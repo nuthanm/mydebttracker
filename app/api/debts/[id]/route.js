@@ -92,7 +92,7 @@ export async function PATCH(req, { params }) {
       const currentMonth = normalizeEffectiveMonth(getCurrentMonth());
       if (firstInterestMonth && compareEffectiveMonths(effectiveMonth, firstInterestMonth) < 0) {
         return NextResponse.json(
-          { error: `Effective month cannot be earlier than ${firstInterestMonth.slice(0, 7)}.` },
+          { error: `Effective month cannot be earlier than ${(firstInterestMonth || '').slice(0, 7) || 'the first interest month'}.` },
           { status: 400 }
         );
       }
