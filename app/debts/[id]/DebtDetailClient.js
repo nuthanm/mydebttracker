@@ -13,6 +13,14 @@ const PAYMENT_TYPES = [
   { value: 'clearance',  label: 'Full clearance' },
 ];
 
+/** Returns the number of whole months covered by a YYYY-MM range (inclusive). */
+function monthsInRange(fromYM, toYM) {
+  if (!fromYM || !toYM) return 0;
+  const [fy, fm] = fromYM.split('-').map(Number);
+  const [ty, tm] = toYM.split('-').map(Number);
+  return (ty - fy) * 12 + (tm - fm) + 1;
+}
+
 export default function DebtDetailClient({ user, debtId }) {
   const router = useRouter();
   const shareRef = useRef(null);
@@ -69,12 +77,10 @@ export default function DebtDetailClient({ user, debtId }) {
   // When month range changes, auto-fill amount
   useEffect(() => {
     if (!multiMonth || !rangeFrom || !rangeTo || !debt) return;
-    const [fy, fm] = rangeFrom.split('-').map(Number);
-    const [ty, tm] = rangeTo.split('-').map(Number);
-    const numMonths = (ty - fy) * 12 + (tm - fm) + 1;
-    if (numMonths <= 0) return;
+    const n = monthsInRange(rangeFrom, rangeTo);
+    if (n <= 0) return;
     const monthly = monthlyInterest(debt.current_principal, debt.interest_rate);
-    setPForm(f => ({ ...f, amount: String(Math.round(monthly * numMonths)) }));
+    setPForm(f => ({ ...f, amount: String(Math.round(monthly * n)) }));
   }, [multiMonth, rangeFrom, rangeTo, debt]);
 
   const handlePaymentSubmit = async (e) => {
@@ -86,11 +92,10 @@ export default function DebtDetailClient({ user, debtId }) {
 
       if (multiMonth && pForm.payment_type === 'interest') {
         if (!rangeFrom || !rangeTo) throw new Error('Please select both from and to months.');
-        const [fy, fm] = rangeFrom.split('-').map(Number);
+        if (monthsInRange(rangeFrom, rangeTo) <= 0) throw new Error('"To" month must be on or after "From" month.');
         const [ty, tm] = rangeTo.split('-').map(Number);
-        if ((ty - fy) * 12 + (tm - fm) < 0) throw new Error('"To" month must be on or after "From" month.');
-        const fromLabel = new Date(fy, fm - 1, 1).toLocaleString('en-IN', { month: 'short', year: 'numeric' });
-        const toLabel   = new Date(ty, tm - 1, 1).toLocaleString('en-IN', { month: 'short', year: 'numeric' });
+        const fromLabel = fmtMonthYear(new Date(rangeFrom.split('-')[0], rangeFrom.split('-')[1] - 1, 1));
+        const toLabel   = fmtMonthYear(new Date(ty, tm - 1, 1));
         submitForm = {
           ...submitForm,
           payment_date: `${ty}-${String(tm).padStart(2, '0')}-01`,
@@ -557,9 +562,7 @@ export default function DebtDetailClient({ user, debtId }) {
                 value={pForm.amount}
                 onChange={e => setP('amount', e.target.value)} required className="field-input" />
               {multiMonth && rangeFrom && rangeTo && (() => {
-                const [fy, fm] = rangeFrom.split('-').map(Number);
-                const [ty, tm] = rangeTo.split('-').map(Number);
-                const n = (ty - fy) * 12 + (tm - fm) + 1;
+                const n = monthsInRange(rangeFrom, rangeTo);
                 return n > 0 ? (
                   <p className="text-[11px] text-ink-mute mt-1">
                     {n} month{n > 1 ? 's' : ''} × {inr(monthly)} = <span className="text-danger font-medium">{inr(monthly * n)}</span>

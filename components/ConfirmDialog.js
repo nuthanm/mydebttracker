@@ -2,11 +2,11 @@
 
 import { useEffect, useState } from 'react';
 
-let _resolve = null;
+let _resolveQueue = [];
 
 export function appConfirm(message) {
   return new Promise(resolve => {
-    _resolve = resolve;
+    _resolveQueue.push(resolve);
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('app:confirm', { detail: { message } }));
     }
@@ -24,7 +24,8 @@ export default function ConfirmDialog() {
 
   const resolve = (result) => {
     setState(s => ({ ...s, open: false }));
-    if (_resolve) { _resolve(result); _resolve = null; }
+    const fn = _resolveQueue.shift();
+    if (fn) fn(result);
   };
 
   if (!state.open) return null;
