@@ -10,10 +10,21 @@ import {
   getFirstInterestMonth,
   normalizeEffectiveMonth,
 } from '@/lib/debtInterest';
+import {
+  enrichDebtWithDashboardMetrics,
+  ensureDebtMetadataColumns,
+  normalizeDebtCategory,
+  normalizeDebtPriority,
+} from '@/lib/debtDashboard';
 
 export async function GET(req, { params }) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+  await Promise.all([
+    ensureDebtRateChangesTable(sql),
+    ensureDebtMetadataColumns(sql),
+  ]);
 
   const rows = await sql`
     SELECT
@@ -31,8 +42,6 @@ export async function GET(req, { params }) {
 
   if (!rows.length) return NextResponse.json({ error: 'Not found.' }, { status: 404 });
 
-  await ensureDebtRateChangesTable(sql);
-
   const [payments, rateChanges] = await Promise.all([
     sql`
       SELECT payment_date, payment_type, amount
@@ -48,7 +57,7 @@ export async function GET(req, { params }) {
     `,
   ]);
 
-  const debt = {
+  const debt = enrichDebtWithDashboardMetrics({
     ...rows[0],
     ...calculateDebtInterestSummary({
       debt: rows[0],
@@ -56,7 +65,7 @@ export async function GET(req, { params }) {
       rateChanges,
     }),
     rate_changes: rateChanges,
-  };
+  });
 
   return NextResponse.json({ debt });
 }
@@ -66,17 +75,27 @@ export async function PATCH(req, { params }) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   try {
+    await Promise.all([
+      ensureDebtRateChangesTable(sql),
+      ensureDebtMetadataColumns(sql),
+    ]);
+
     const body = await req.json();
-    const { lender_name, principal, interest_rate, rate_effective_month, target_date, notes, status } = body;
+    const { lender_name, principal, interest_rate, rate_effective_month, target_date, category, priority, notes, status } = body;
 
     const existing = await sql`SELECT * FROM debts WHERE id = ${params.id} AND user_id = ${user.id} LIMIT 1`;
     if (!existing.length) return NextResponse.json({ error: 'Not found.' }, { status: 404 });
     const debt = existing[0];
     const currentRate = Number(debt.interest_rate || 0);
     const nextRate = interest_rate !== undefined ? parseFloat(interest_rate) : currentRate;
+    const nextPriority = priority !== undefined ? normalizeDebtPriority(priority) : (debt.priority == null ? null : Number(debt.priority));
+    const nextCategory = category !== undefined ? normalizeDebtCategory(category) : debt.category;
 
-    if (interest_rate !== undefined && (isNaN(nextRate) || nextRate < 0)) {
+    if (interest_rate !== undefined && (Number.isNaN(nextRate) || nextRate < 0)) {
       return NextResponse.json({ error: 'interest_rate must be a non-negative number.' }, { status: 400 });
+    }
+    if (Number.isNaN(nextPriority)) {
+      return NextResponse.json({ error: 'priority must be between 1 and 10.' }, { status: 400 });
     }
 
     const rateHasChanged = interest_rate !== undefined && nextRate !== currentRate;
@@ -104,7 +123,7 @@ export async function PATCH(req, { params }) {
     let rows;
     if (principal !== undefined) {
       const principalNum = parseFloat(principal);
-      if (isNaN(principalNum) || principalNum <= 0) {
+      if (Number.isNaN(principalNum) || principalNum <= 0) {
         return NextResponse.json({ error: 'principal must be a positive number.' }, { status: 400 });
       }
 
@@ -130,6 +149,8 @@ export async function PATCH(req, { params }) {
           current_principal = ${currentPrincipalValue},
           interest_rate = ${nextRate},
           target_date   = ${target_date !== undefined ? (target_date || null) : debt.target_date},
+          category      = ${nextCategory},
+          priority      = ${nextPriority},
           notes         = ${notes?.trim() !== undefined ? (notes?.trim() || null) : debt.notes},
           status        = ${status ?? debt.status}
         WHERE id = ${params.id} AND user_id = ${user.id}
@@ -141,6 +162,8 @@ export async function PATCH(req, { params }) {
           lender_name   = ${lender_name?.trim() ?? debt.lender_name},
           interest_rate = ${nextRate},
           target_date   = ${target_date !== undefined ? (target_date || null) : debt.target_date},
+          category      = ${nextCategory},
+          priority      = ${nextPriority},
           notes         = ${notes?.trim() !== undefined ? (notes?.trim() || null) : debt.notes},
           status        = ${status ?? debt.status}
         WHERE id = ${params.id} AND user_id = ${user.id}
