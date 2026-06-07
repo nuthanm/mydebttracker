@@ -41,10 +41,15 @@ export async function GET(req) {
   const category = normalizeDebtCategory(searchParams.get('category'));
   const instrumentTagRaw = searchParams.get('instrument_tag');
   const instrumentTag = instrumentTagRaw === 'all' ? null : normalizeDebtInstrumentTag(instrumentTagRaw);
+  const priorityRaw = searchParams.get('priority');
+  const priority = priorityRaw === 'all' ? null : (priorityRaw === 'none' ? 'none' : normalizeDebtPriority(priorityRaw));
   const fromDate = searchParams.get('from_date') || searchParams.get('from') || null;
   const toDate = searchParams.get('to_date') || searchParams.get('to') || null;
   if (Number.isNaN(instrumentTag)) {
     return NextResponse.json({ error: 'instrument_tag must be one of temp, short_term, long_term.' }, { status: 400 });
+  }
+  if (Number.isNaN(priority)) {
+    return NextResponse.json({ error: 'priority must be a valid value.' }, { status: 400 });
   }
 
   const debts = await sql`
@@ -66,7 +71,14 @@ export async function GET(req) {
       debts: [],
       categories: [],
       instrument_tags: [],
-      filters: { category: category || 'all', instrument_tag: instrumentTag || 'all', from_date: fromDate, to_date: toDate },
+      priorities: [],
+      filters: {
+        category: category || 'all',
+        instrument_tag: instrumentTag || 'all',
+        priority: priority == null ? 'all' : priority,
+        from_date: fromDate,
+        to_date: toDate,
+      },
       summary: {
         total_outstanding: 0,
         total_unpaid_interest: 0,
@@ -119,7 +131,8 @@ export async function GET(req) {
         p.created_at,
         d.lender_name,
         d.category,
-        d.instrument_tag
+        d.instrument_tag,
+        d.priority
       FROM debt_payments p
       INNER JOIN debts d ON d.id = p.debt_id
       WHERE d.user_id = ${user.id}
@@ -155,14 +168,24 @@ export async function GET(req) {
   const tagFilteredDebts = instrumentTag
     ? filteredDebts.filter((debt) => debt.instrument_tag === instrumentTag)
     : filteredDebts;
+  const priorityFilteredDebts = priority == null
+    ? tagFilteredDebts
+    : priority === 'none'
+      ? tagFilteredDebts.filter((debt) => debt.priority == null)
+      : tagFilteredDebts.filter((debt) => Number(debt.priority) === Number(priority));
   const categoryFilteredPayments = category
     ? paymentRows.filter((payment) => payment.category === category)
     : paymentRows;
-  const filteredPayments = instrumentTag
+  const tagFilteredPayments = instrumentTag
     ? categoryFilteredPayments.filter((payment) => payment.instrument_tag === instrumentTag)
     : categoryFilteredPayments;
+  const filteredPayments = priority == null
+    ? tagFilteredPayments
+    : priority === 'none'
+      ? tagFilteredPayments.filter((payment) => payment.priority == null)
+      : tagFilteredPayments.filter((payment) => Number(payment.priority) === Number(priority));
 
-  const sanitizedDebts = tagFilteredDebts.map((debt) => {
+  const sanitizedDebts = priorityFilteredDebts.map((debt) => {
     const normalizedTag = normalizeDebtInstrumentTag(debt.instrument_tag);
     return {
       ...debt,
@@ -175,9 +198,11 @@ export async function GET(req) {
     debts: [...sanitizedDebts].sort(sortDebtsForList),
     categories: listDebtCategories(enrichedAllDebts),
     instrument_tags: listDebtInstrumentTags(enrichedAllDebts),
+    priorities: Array.from(new Set(enrichedAllDebts.map((debt) => debt.priority).filter((value) => value != null))).sort((a, b) => a - b),
     filters: {
       category: category || 'all',
       instrument_tag: instrumentTag || 'all',
+      priority: priority == null ? 'all' : priority,
       from_date: fromDate,
       to_date: toDate,
     },
