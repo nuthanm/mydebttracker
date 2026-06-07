@@ -95,6 +95,20 @@ export default function HomeClient({ user }) {
   const paymentDays = dashboard?.payment_range?.days || [];
   const maxOutstanding = Math.max(...byOutstanding.map((debt) => Number(debt.outstanding_total || 0)), 1);
   const maxMonthlyInterest = Math.max(...byInterest.map((debt) => Number(debt.current_monthly_interest || 0)), 1);
+  const principalPaidTotal = useMemo(
+    () => activeDebts.reduce((sum, debt) => sum + Number(debt.total_principal_paid || 0), 0),
+    [activeDebts]
+  );
+  const interestPaidTotal = useMemo(
+    () => activeDebts.reduce((sum, debt) => sum + Number(debt.total_interest_paid || 0), 0),
+    [activeDebts]
+  );
+  const totalPaidCombined = activeDebts.reduce((sum, debt) => sum + Number(debt.total_paid || 0), 0);
+  const totalOutstandingCombined = activeDebts.reduce((sum, debt) => sum + Number(debt.outstanding_total || 0), 0);
+  const paidVsOutstandingPct = Math.max(
+    1,
+    Math.round((totalPaidCombined / Math.max(1, totalPaidCombined + totalOutstandingCombined)) * 100)
+  );
 
   const handleExport = async () => {
     try {
@@ -246,14 +260,14 @@ export default function HomeClient({ user }) {
             </div>
             <div className="bg-paper-card border border-edge rounded-xl p-3.5">
               <p className="text-[11px] text-ink-mute">Principal paid</p>
-              <p className="text-lg font-medium mt-1 text-mint-600">{inrShort(activeDebts.reduce((sum, debt) => sum + Number(debt.total_principal_paid || 0), 0))}</p>
+              <p className="text-lg font-medium mt-1 text-mint-600">{inrShort(principalPaidTotal)}</p>
             </div>
             <div className="bg-paper-card border border-edge rounded-xl p-3.5">
               <p className="text-[11px] text-ink-mute">Interest paid</p>
-              <p className="text-lg font-medium mt-1 text-sky-600">{inrShort(activeDebts.reduce((sum, debt) => sum + Number(debt.total_interest_paid || 0), 0))}</p>
+              <p className="text-lg font-medium mt-1 text-sky-600">{inrShort(interestPaidTotal)}</p>
             </div>
             <div className="bg-paper-card border border-edge rounded-xl p-3.5">
-              <p className="text-[11px] text-ink-mute">Current day outflow</p>
+              <p className="text-[11px] text-ink-mute">Selected range outflow</p>
               <p className="text-lg font-medium mt-1 text-plum-600">{inrShort(dashboard.payment_range.total_outflow)}</p>
             </div>
           </div>
@@ -355,7 +369,7 @@ export default function HomeClient({ user }) {
                   <div
                     className="w-36 h-36 rounded-full"
                     style={{
-                      background: `conic-gradient(#0F6E56 0 ${Math.max(1, Math.round((activeDebts.reduce((s, d) => s + Number(d.total_paid || 0), 0) / Math.max(1, activeDebts.reduce((s, d) => s + Number(d.total_paid || 0) + Number(d.outstanding_total || 0), 0))) * 100))}%, #A32D2D 0 100%)`,
+                      background: `conic-gradient(#0F6E56 0 ${paidVsOutstandingPct}%, #A32D2D 0 100%)`,
                     }}
                   />
                   <p className="text-xs">Paid vs outstanding (combined)</p>
@@ -423,7 +437,7 @@ export default function HomeClient({ user }) {
             <div className="flex justify-between items-start mb-4 gap-3 flex-wrap">
               <div>
                 <h2 className="text-sm font-medium">Day-wise account outflow</h2>
-                <p className="text-[11px] text-ink-mute mt-1">By default this shows current day outflow. Change date filters above for another range.</p>
+                <p className="text-[11px] text-ink-mute mt-1">By default this shows today&apos;s outflow. Change date filters above for another range.</p>
               </div>
               <div className="flex items-center gap-2">
                 <span className="text-xs text-sky-600">{inr(dashboard.payment_range.total_outflow)} total</span>

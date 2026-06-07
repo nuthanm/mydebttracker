@@ -127,8 +127,13 @@ export default function DebtsClient({ user }) {
         }))
       );
 
-      const failed = responses.filter((response) => !response.ok).length;
+      const failures = [];
+      responses.forEach((response, index) => {
+        if (!response.ok) failures.push(selectedIds[index]);
+      });
+      const failed = failures.length;
       if (failed > 0) {
+        console.error('Bulk debt update failed for ids:', failures);
         toast(`Updated ${selectedIds.length - failed}/${selectedIds.length} debts.`, 'error');
       } else {
         toast(`Updated ${selectedIds.length} debts.`);
@@ -235,7 +240,7 @@ export default function DebtsClient({ user }) {
                 <option key={value} value={value}>P{value}</option>
               ))}
             </select>
-            <p className="text-xs text-ink-mute">
+            <p className="text-xs text-ink-mute" aria-live="polite" aria-label="Bulk selection summary">
               {selectedIds.length} selected · {priorityLabel(priorityFilter)}
             </p>
             <button
