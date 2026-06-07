@@ -14,6 +14,19 @@ const PAYMENT_TYPES = [
   { value: 'principal',  label: 'Principal repayment' },
   { value: 'clearance',  label: 'Full clearance' },
 ];
+const INSTRUMENT_TAG_OPTIONS = [
+  { value: '', label: 'Select tag' },
+  { value: 'temp', label: 'Temp' },
+  { value: 'short_term', label: 'Short term' },
+  { value: 'long_term', label: 'Long term' },
+];
+
+function instrumentTagLabel(value) {
+  if (value === 'temp') return 'Temp';
+  if (value === 'short_term') return 'Short term';
+  if (value === 'long_term') return 'Long term';
+  return value || '';
+}
 
 /** Returns the number of whole months covered by a YYYY-MM range (inclusive). */
 function monthsInRange(fromYM, toYM) {
@@ -56,6 +69,7 @@ export default function DebtDetailClient({ user, debtId }) {
     interest_rate: '',
     rate_effective_month: currentMonth,
     category: '',
+    instrument_tag: '',
     priority: '',
     target_date: '',
     notes: '',
@@ -76,6 +90,7 @@ export default function DebtDetailClient({ user, debtId }) {
         interest_rate: dr.debt.interest_rate || '',
         rate_effective_month: currentMonth,
         category: dr.debt.category || '',
+        instrument_tag: dr.debt.instrument_tag || '',
         priority: dr.debt.priority ?? '',
         target_date: dr.debt.target_date ? dr.debt.target_date.slice(0, 10) : '',
         notes: dr.debt.notes || '',
@@ -183,6 +198,7 @@ export default function DebtDetailClient({ user, debtId }) {
           interest_rate: eForm.interest_rate,
           rate_effective_month: eForm.rate_effective_month,
           category: eForm.category || null,
+          instrument_tag: eForm.instrument_tag || null,
           priority: eForm.priority || null,
           target_date: eForm.target_date || null,
           notes: eForm.notes || null,
@@ -343,12 +359,14 @@ export default function DebtDetailClient({ user, debtId }) {
   const monthly = Number(debt.current_monthly_interest || 0);
   const unpaidInterest = Number(debt.unpaid_interest || 0);
   const totalOwed = Number(debt.current_principal) + unpaidInterest;
+  const payableThisMonth = totalOwed + monthly;
   const detailTooltip = [
     `Monthly interest: ${inr(monthly)}`,
     `Interest paid: ${inr(debt.total_interest_paid || 0)}`,
     `Principal paid: ${inr(debt.total_principal_paid || 0)}`,
     `Unpaid interest: ${inr(unpaidInterest)}`,
-    `Total owed: ${inr(totalOwed)}`,
+    `Total owed (excluding current month interest): ${inr(totalOwed)}`,
+    `Payable with current month interest: ${inr(payableThisMonth)}`,
   ].join('\n');
 
   // Bar chart data for monthly breakdown (last 6 months)
@@ -369,6 +387,11 @@ export default function DebtDetailClient({ user, debtId }) {
               {debt.category && (
                 <span className="text-[10px] px-2 py-0.5 rounded-full font-medium bg-sky-50 text-sky-600">
                   {debt.category}
+                </span>
+              )}
+              {debt.instrument_tag && (
+                <span className="text-[10px] px-2 py-0.5 rounded-full font-medium bg-amber-50 text-amber-700">
+                  {instrumentTagLabel(debt.instrument_tag)}
                 </span>
               )}
               {debt.priority != null && (
@@ -474,6 +497,15 @@ export default function DebtDetailClient({ user, debtId }) {
                  onChange={e => setE('category', e.target.value)} className="field-input" />
               </div>
               <div>
+               <label className="block text-xs text-ink-soft mb-1.5">Debt tag <span className="text-ink-mute">(optional)</span></label>
+               <select value={eForm.instrument_tag}
+                 onChange={e => setE('instrument_tag', e.target.value)} className="field-input">
+                 {INSTRUMENT_TAG_OPTIONS.map((option) => (
+                   <option key={option.value || 'blank'} value={option.value}>{option.label}</option>
+                 ))}
+               </select>
+              </div>
+              <div>
                <label className="block text-xs text-ink-soft mb-1.5">Priority <span className="text-ink-mute">(optional)</span></label>
                <input type="number" inputMode="numeric" min="1" max="10" step="1" value={eForm.priority}
                  onChange={e => setE('priority', e.target.value)} className="field-input" />
@@ -527,6 +559,10 @@ export default function DebtDetailClient({ user, debtId }) {
             <p className="text-base font-medium mt-1">{debt.category || '—'}</p>
           </div>
           <div className="bg-paper-card border border-edge rounded-xl p-3.5">
+            <p className="text-[11px] text-ink-mute">Debt tag</p>
+            <p className="text-base font-medium mt-1">{instrumentTagLabel(debt.instrument_tag) || '—'}</p>
+          </div>
+          <div className="bg-paper-card border border-edge rounded-xl p-3.5">
             <p className="text-[11px] text-ink-mute">Priority</p>
             <p className="text-base font-medium mt-1">{debt.priority != null ? `P${debt.priority}` : '—'}</p>
           </div>
@@ -542,8 +578,11 @@ export default function DebtDetailClient({ user, debtId }) {
             </p>
           </div>
           <div className="bg-paper-card border border-edge rounded-xl p-3.5 bg-danger/5 border-danger/20">
-            <p className="text-[11px] text-danger">Total owed now</p>
-            <p className="text-base font-medium mt-1 text-danger">{inr(totalOwed)}</p>
+            <p className="text-[11px] text-danger">Payable this month</p>
+            <p className="text-base font-medium mt-1 text-danger">{inr(payableThisMonth)}</p>
+            <p className="text-[10px] text-ink-mute">
+              {inr(totalOwed)} pending + {inr(monthly)} current month interest
+            </p>
           </div>
         </div>
 

@@ -37,6 +37,7 @@ CREATE TABLE IF NOT EXISTS debts (
   interest_rate NUMERIC(6,3) NOT NULL,       -- monthly interest rate in %
   start_date DATE NOT NULL DEFAULT CURRENT_DATE,
   category TEXT,                             -- optional category label (bank/family/etc.)
+  instrument_tag TEXT,                       -- optional tag (temp | short_term | long_term)
   priority INTEGER,                          -- optional payoff priority (1 = highest)
   target_date DATE,                          -- optional target clearance date
   status TEXT NOT NULL DEFAULT 'active',     -- active | cleared

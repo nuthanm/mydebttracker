@@ -8,12 +8,18 @@ import {
   enrichDebtWithDashboardMetrics,
   ensureDebtMetadataColumns,
   listDebtCategories,
+  listDebtInstrumentTags,
   normalizeDebtCategory,
+  normalizeDebtInstrumentTag,
   normalizeDebtPriority,
 } from '@/lib/debtDashboard';
 
 function sortDebtsForList(left, right) {
   if (left.status !== right.status) return left.status === 'active' ? -1 : 1;
+  if (left.status === 'active' && right.status === 'active') {
+    const interestDiff = Number(right.interest_rate || 0) - Number(left.interest_rate || 0);
+    if (interestDiff !== 0) return interestDiff;
+  }
   if (left.priority == null && right.priority != null) return 1;
   if (left.priority != null && right.priority == null) return -1;
   if (left.priority != null && right.priority != null && left.priority !== right.priority) {
@@ -33,8 +39,13 @@ export async function GET(req) {
 
   const searchParams = new URL(req.url).searchParams;
   const category = normalizeDebtCategory(searchParams.get('category'));
+  const instrumentTagRaw = searchParams.get('instrument_tag');
+  const instrumentTag = instrumentTagRaw === 'all' ? null : normalizeDebtInstrumentTag(instrumentTagRaw);
   const fromDate = searchParams.get('from_date') || searchParams.get('from') || null;
   const toDate = searchParams.get('to_date') || searchParams.get('to') || null;
+  if (Number.isNaN(instrumentTag)) {
+    return NextResponse.json({ error: 'instrument_tag must be one of temp, short_term, long_term.' }, { status: 400 });
+  }
 
   const debts = await sql`
     SELECT
@@ -54,7 +65,8 @@ export async function GET(req) {
     return NextResponse.json({
       debts: [],
       categories: [],
-      filters: { category: category || 'all', from_date: fromDate, to_date: toDate },
+      instrument_tags: [],
+      filters: { category: category || 'all', instrument_tag: instrumentTag || 'all', from_date: fromDate, to_date: toDate },
       summary: {
         total_outstanding: 0,
         total_unpaid_interest: 0,
@@ -97,7 +109,17 @@ export async function GET(req) {
       ORDER BY rc.effective_month ASC, rc.created_at ASC
     `,
     sql`
-      SELECT p.*, d.lender_name, d.category
+      SELECT
+        p.id,
+        p.debt_id,
+        p.payment_date,
+        p.payment_type,
+        p.amount,
+        p.notes,
+        p.created_at,
+        d.lender_name,
+        d.category,
+        d.instrument_tag
       FROM debt_payments p
       INNER JOIN debts d ON d.id = p.debt_id
       WHERE d.user_id = ${user.id}
@@ -130,20 +152,32 @@ export async function GET(req) {
   const filteredDebts = category
     ? enrichedAllDebts.filter((debt) => debt.category === category)
     : enrichedAllDebts;
-  const filteredPayments = category
+  const tagFilteredDebts = instrumentTag
+    ? filteredDebts.filter((debt) => debt.instrument_tag === instrumentTag)
+    : filteredDebts;
+  const categoryFilteredPayments = category
     ? paymentRows.filter((payment) => payment.category === category)
     : paymentRows;
+  const filteredPayments = instrumentTag
+    ? categoryFilteredPayments.filter((payment) => payment.instrument_tag === instrumentTag)
+    : categoryFilteredPayments;
 
-  const sanitizedDebts = filteredDebts.map((debt) => ({
-    ...debt,
-    priority: debt.priority == null ? null : normalizeDebtPriority(debt.priority),
-  }));
+  const sanitizedDebts = tagFilteredDebts.map((debt) => {
+    const normalizedTag = normalizeDebtInstrumentTag(debt.instrument_tag);
+    return {
+      ...debt,
+      priority: debt.priority == null ? null : normalizeDebtPriority(debt.priority),
+      instrument_tag: Number.isNaN(normalizedTag) ? null : normalizedTag,
+    };
+  });
 
   return NextResponse.json({
     debts: [...sanitizedDebts].sort(sortDebtsForList),
     categories: listDebtCategories(enrichedAllDebts),
+    instrument_tags: listDebtInstrumentTags(enrichedAllDebts),
     filters: {
       category: category || 'all',
+      instrument_tag: instrumentTag || 'all',
       from_date: fromDate,
       to_date: toDate,
     },
@@ -166,7 +200,7 @@ export async function POST(req) {
     ]);
 
     const body = await req.json();
-    const { lender_name, principal, interest_rate, start_date, target_date, category, priority, notes } = body;
+    const { lender_name, principal, interest_rate, start_date, target_date, category, instrument_tag, priority, notes } = body;
 
     if (!lender_name || !principal || !interest_rate || !start_date) {
       return NextResponse.json({ error: 'lender_name, principal, interest_rate, and start_date are required.' }, { status: 400 });
@@ -176,6 +210,7 @@ export async function POST(req) {
     const rateNum = parseFloat(interest_rate);
     const priorityNum = normalizeDebtPriority(priority);
     const categoryName = normalizeDebtCategory(category);
+    const normalizedInstrumentTag = normalizeDebtInstrumentTag(instrument_tag);
     if (Number.isNaN(principalNum) || principalNum <= 0) {
       return NextResponse.json({ error: 'principal must be a positive number.' }, { status: 400 });
     }
@@ -185,9 +220,12 @@ export async function POST(req) {
     if (Number.isNaN(priorityNum)) {
       return NextResponse.json({ error: 'priority must be between 1 and 10.' }, { status: 400 });
     }
+    if (Number.isNaN(normalizedInstrumentTag)) {
+      return NextResponse.json({ error: 'instrument_tag must be one of temp, short_term, long_term.' }, { status: 400 });
+    }
 
     const rows = await sql`
-      INSERT INTO debts (user_id, lender_name, principal, current_principal, interest_rate, start_date, target_date, category, priority, notes)
+      INSERT INTO debts (user_id, lender_name, principal, current_principal, interest_rate, start_date, target_date, category, instrument_tag, priority, notes)
       VALUES (
         ${user.id},
         ${lender_name.trim()},
@@ -197,6 +235,7 @@ export async function POST(req) {
         ${start_date},
         ${target_date || null},
         ${categoryName},
+        ${normalizedInstrumentTag},
         ${priorityNum},
         ${notes?.trim() || null}
       )
