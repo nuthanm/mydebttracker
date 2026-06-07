@@ -1,8 +1,9 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import Shell from '@/components/Shell';
+import { toast } from '@/components/Toast';
 import { inr, inrShort, fmtDate, fmtMonthYear, statusColor, statusLabel } from '@/lib/format';
 import { getAccruedMonthsCount } from '@/lib/debtInterest';
 
@@ -19,26 +20,46 @@ function alertTone(status) {
     : 'bg-honey-50 border-honey-600/20 text-honey-600';
 }
 
+function priorityLabel(value) {
+  if (value === 'all') return 'All priorities';
+  if (value === 'none') return 'No priority';
+  return `P${value}`;
+}
+
 export default function DebtsClient({ user }) {
   const [debts, setDebts] = useState([]);
   const [categories, setCategories] = useState([]);
   const [instrumentTags, setInstrumentTags] = useState([]);
+  const [priorities, setPriorities] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('all'); // all | active | cleared
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [tagFilter, setTagFilter] = useState('all');
+  const [priorityFilter, setPriorityFilter] = useState('all');
+  const [viewMode, setViewMode] = useState('list');
+  const [selectedIds, setSelectedIds] = useState([]);
+  const [bulkCategory, setBulkCategory] = useState('');
+  const [bulkPriority, setBulkPriority] = useState('');
+  const [bulkSaving, setBulkSaving] = useState(false);
 
-  useEffect(() => {
+  const loadDebts = useCallback(() => {
+    setLoading(true);
     fetch('/api/debts')
       .then(r => r.json())
       .then((data) => {
         setDebts(data.debts || []);
         setCategories(data.categories || []);
         setInstrumentTags(data.instrument_tags || []);
+        setPriorities(data.priorities || []);
+        setSelectedIds([]);
         setLoading(false);
       });
   }, []);
+
+  useEffect(() => {
+    loadDebts();
+  }, [loadDebts]);
 
   const alerts = useMemo(
     () => debts.filter((debt) => debt.status === 'active' && debt.urgency_status !== 'none'),
@@ -50,6 +71,11 @@ export default function DebtsClient({ user }) {
     .filter(d => categoryFilter === 'all' ? true : d.category === categoryFilter)
     .filter(d => tagFilter === 'all' ? true : d.instrument_tag === tagFilter)
     .filter(d => {
+      if (priorityFilter === 'all') return true;
+      if (priorityFilter === 'none') return d.priority == null;
+      return Number(d.priority) === Number(priorityFilter);
+    })
+    .filter(d => {
       const term = search.trim().toLowerCase();
       if (!term) return true;
       return [d.lender_name, d.notes, d.category, d.instrument_tag, instrumentTagLabel(d.instrument_tag)]
@@ -57,9 +83,70 @@ export default function DebtsClient({ user }) {
         .some((value) => value.toLowerCase().includes(term));
     });
 
+  const allVisibleSelected = filtered.length > 0 && filtered.every((debt) => selectedIds.includes(debt.id));
+
+  const toggleSelectAllVisible = () => {
+    if (allVisibleSelected) {
+      setSelectedIds((existing) => existing.filter((id) => !filtered.some((debt) => debt.id === id)));
+      return;
+    }
+    setSelectedIds((existing) => {
+      const merged = new Set(existing);
+      filtered.forEach((debt) => merged.add(debt.id));
+      return Array.from(merged);
+    });
+  };
+
+  const toggleSelectDebt = (debtId) => {
+    setSelectedIds((existing) => existing.includes(debtId)
+      ? existing.filter((id) => id !== debtId)
+      : [...existing, debtId]);
+  };
+
+  const handleBulkApply = async () => {
+    if (!selectedIds.length) {
+      toast('Select at least one debt.', 'error');
+      return;
+    }
+    if (bulkCategory.trim() === '' && bulkPriority === '') {
+      toast('Choose a category or priority to update.', 'error');
+      return;
+    }
+
+    setBulkSaving(true);
+    try {
+      const payload = {};
+      if (bulkCategory.trim() !== '') payload.category = bulkCategory.trim();
+      if (bulkPriority !== '') payload.priority = bulkPriority === 'none' ? null : Number(bulkPriority);
+
+      const responses = await Promise.all(
+        selectedIds.map((id) => fetch(`/api/debts/${id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        }))
+      );
+
+      const failed = responses.filter((response) => !response.ok).length;
+      if (failed > 0) {
+        toast(`Updated ${selectedIds.length - failed}/${selectedIds.length} debts.`, 'error');
+      } else {
+        toast(`Updated ${selectedIds.length} debts.`);
+      }
+
+      setBulkCategory('');
+      setBulkPriority('');
+      loadDebts();
+    } catch (err) {
+      toast('Could not apply bulk update.', 'error');
+    } finally {
+      setBulkSaving(false);
+    }
+  };
+
   return (
     <Shell user={user}>
-      <div className="px-4 md:px-8 py-5 md:py-6 max-w-4xl mx-auto w-full">
+      <div className="px-4 md:px-8 py-5 md:py-6 max-w-5xl mx-auto w-full">
         <div className="flex items-center justify-between mb-4 gap-3">
           <div>
             <h1 className="text-xl font-medium">All debts</h1>
@@ -77,7 +164,6 @@ export default function DebtsClient({ user }) {
                 key={debt.id}
                 href={`/debts/${debt.id}`}
                 className={`block rounded-2xl border px-4 py-3 ${alertTone(debt.urgency_status)}`}
-                title={`${debt.lender_name} · ${debt.urgency_message} · Target ${fmtDate(debt.target_date)}`}
               >
                 <p className="text-sm font-medium">{debt.lender_name}</p>
                 <p className="text-xs mt-1">{debt.urgency_message} · target {fmtDate(debt.target_date)}</p>
@@ -86,7 +172,7 @@ export default function DebtsClient({ user }) {
           </div>
         )}
 
-        <div className="grid md:grid-cols-[1fr,180px,180px] gap-3 mb-4">
+        <div className="grid md:grid-cols-[1fr,180px,180px,170px] gap-3 mb-4">
           <input
             type="search"
             value={search}
@@ -106,16 +192,61 @@ export default function DebtsClient({ user }) {
               <option key={tag} value={tag}>{instrumentTagLabel(tag)}</option>
             ))}
           </select>
+          <select value={priorityFilter} onChange={(e) => setPriorityFilter(e.target.value)} className="field-input">
+            <option value="all">All priorities</option>
+            <option value="none">No priority</option>
+            {priorities.map((priority) => (
+              <option key={priority} value={priority}>P{priority}</option>
+            ))}
+          </select>
         </div>
 
-        <div className="flex gap-2 mb-4 flex-wrap">
-          {['all', 'active', 'cleared'].map(f => (
-            <button key={f} onClick={() => setFilter(f)}
-              className={`chip text-xs capitalize ${filter === f ? 'on' : ''}`}>
-              {f}
-            </button>
-          ))}
+        <div className="flex gap-2 mb-4 flex-wrap items-center justify-between">
+          <div className="flex gap-2 flex-wrap">
+            {['all', 'active', 'cleared'].map(f => (
+              <button key={f} onClick={() => setFilter(f)} className={`chip text-xs capitalize ${filter === f ? 'on' : ''}`}>
+                {f}
+              </button>
+            ))}
+          </div>
+          <div className="flex gap-2">
+            <button onClick={() => setViewMode('list')} className={`chip text-xs ${viewMode === 'list' ? 'on' : ''}`}>List view</button>
+            <button onClick={() => setViewMode('tile')} className={`chip text-xs ${viewMode === 'tile' ? 'on' : ''}`}>Tile view</button>
+          </div>
         </div>
+
+        <section className="bg-paper-card border border-edge rounded-2xl p-3 mb-4">
+          <div className="grid md:grid-cols-[auto,1fr,180px,150px,auto] gap-2 items-center">
+            <label className="flex items-center gap-2 text-xs text-ink-soft">
+              <input type="checkbox" checked={allVisibleSelected} onChange={toggleSelectAllVisible} className="accent-ink" />
+              Select visible
+            </label>
+            <input
+              type="text"
+              value={bulkCategory}
+              onChange={(e) => setBulkCategory(e.target.value)}
+              placeholder="Bulk category (leave blank to skip)"
+              className="field-input"
+            />
+            <select value={bulkPriority} onChange={(e) => setBulkPriority(e.target.value)} className="field-input">
+              <option value="">Bulk priority (skip)</option>
+              <option value="none">Clear priority</option>
+              {[1,2,3,4,5,6,7,8,9,10].map((value) => (
+                <option key={value} value={value}>P{value}</option>
+              ))}
+            </select>
+            <p className="text-xs text-ink-mute">
+              {selectedIds.length} selected · {priorityLabel(priorityFilter)}
+            </p>
+            <button
+              onClick={handleBulkApply}
+              disabled={bulkSaving || selectedIds.length === 0}
+              className="btn-primary py-2 px-3 rounded-lg text-xs font-medium whitespace-nowrap"
+            >
+              {bulkSaving ? 'Applying…' : 'Apply bulk update'}
+            </button>
+          </div>
+        </section>
 
         {loading && (
           <div className="space-y-3">
@@ -135,76 +266,80 @@ export default function DebtsClient({ user }) {
         )}
 
         {!loading && filtered.length > 0 && (
-          <div className="space-y-3">
+          <div className={viewMode === 'tile' ? 'grid sm:grid-cols-2 gap-3' : 'space-y-3'}>
             {filtered.map(d => {
               const unpaidInterest = Number(d.unpaid_interest || 0);
               const totalOwed = Number(d.outstanding_total || Number(d.current_principal || 0) + unpaidInterest);
               const interestMonths = getAccruedMonthsCount(d.interest_start_month, d.interest_to_month);
-              const tooltip = [
-                `Monthly interest: ${inr(d.current_monthly_interest || 0)}`,
-                `Interest paid: ${inr(d.total_interest_paid || 0)}`,
-                `Principal paid: ${inr(d.total_principal_paid || 0)}`,
-                `Unpaid interest: ${inr(unpaidInterest)}`,
-                `Total owed: ${inr(totalOwed)}`,
-              ].join('\n');
 
               return (
-                <Link key={d.id} href={`/debts/${d.id}`}
-                  className="block bg-paper-card border border-edge rounded-2xl p-4 hover:border-ink-soft transition"
-                  title={tooltip}>
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2 mb-1 flex-wrap">
-                        <p className="font-medium text-sm truncate">{d.lender_name}</p>
-                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${statusColor(d.status)}`}>
-                          {statusLabel(d.status)}
-                        </span>
-                        {d.category && (
-                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-sky-50 text-sky-700 font-medium">
-                            {d.category}
+                <div key={d.id} className="flex gap-2 items-start">
+                  <label className="mt-4">
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.includes(d.id)}
+                      onChange={() => toggleSelectDebt(d.id)}
+                      className="accent-ink"
+                    />
+                  </label>
+                  <Link
+                    href={`/debts/${d.id}`}
+                    className={`block flex-1 bg-paper-card border border-edge rounded-2xl p-4 hover:border-ink-soft transition ${viewMode === 'tile' ? 'h-full' : ''}`}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 mb-1 flex-wrap">
+                          <p className="font-medium text-sm truncate">{d.lender_name}</p>
+                          <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${statusColor(d.status)}`}>
+                            {statusLabel(d.status)}
                           </span>
-                        )}
-                        {d.instrument_tag && (
-                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 font-medium">
-                            {instrumentTagLabel(d.instrument_tag)}
-                          </span>
-                        )}
-                        {d.priority != null && (
-                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-plum-50 text-plum-600 font-medium">
-                            P{d.priority}
-                          </span>
+                          {d.category && (
+                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-sky-50 text-sky-700 font-medium">
+                              {d.category}
+                            </span>
+                          )}
+                          {d.instrument_tag && (
+                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 font-medium">
+                              {instrumentTagLabel(d.instrument_tag)}
+                            </span>
+                          )}
+                          {d.priority != null && (
+                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-plum-50 text-plum-600 font-medium">
+                              P{d.priority}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs text-ink-mute">
+                          {d.interest_rate}% /mo · since {fmtDate(d.start_date)}
+                          {d.target_date ? ` · target ${fmtDate(d.target_date)}` : ''}
+                        </p>
+                        {d.urgency_status !== 'none' && (
+                          <p className={`text-[11px] mt-1 font-medium ${d.urgency_status === 'overdue' ? 'text-danger' : 'text-honey-700'}`}>
+                            {d.urgency_message}
+                          </p>
                         )}
                       </div>
-                      <p className="text-xs text-ink-mute">
-                        {d.interest_rate}% /mo · since {fmtDate(d.start_date)}
-                        {d.target_date ? ` · target ${fmtDate(d.target_date)}` : ''}
-                      </p>
-                      {d.urgency_status !== 'none' && (
-                        <p className={`text-[11px] mt-1 font-medium ${d.urgency_status === 'overdue' ? 'text-danger' : 'text-honey-700'}`}>
-                          {d.urgency_message}
-                        </p>
-                      )}
+                      <div className="text-right flex-shrink-0">
+                        <p className="text-sm font-medium">{inrShort(totalOwed)}</p>
+                        <p className="text-[11px] text-danger">{inrShort(d.current_monthly_interest)}/mo interest</p>
+                      </div>
                     </div>
-                    <div className="text-right flex-shrink-0">
-                      <p className="text-sm font-medium">{inrShort(totalOwed)}</p>
-                      <p className="text-[11px] text-danger">{inrShort(d.current_monthly_interest)}/mo interest</p>
-                    </div>
-                  </div>
 
-                  <div className="mt-3 pt-3 border-t border-edge flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-ink-mute">
-                    <span>Paid: <span className="text-mint-600 font-medium">{inr(d.total_paid)}</span></span>
-                    <span>Interest paid: <span className="text-sky-600 font-medium">{inr(d.total_interest_paid)}</span></span>
-                    <span>
-                      Unpaid interest: <span className="text-danger font-medium">{inr(unpaidInterest)}</span>
-                      {unpaidInterest > 0 && d.interest_start_month && d.interest_to_month && (
-                        <span className="text-ink-mute">
-                          {' '}({fmtMonthYear(d.interest_start_month)} – {fmtMonthYear(d.interest_to_month)} · {interestMonths} mo)
-                        </span>
-                      )}
-                    </span>
-                    <span className="ml-auto">Total owed: <span className="text-ink font-medium">{inr(totalOwed)}</span></span>
-                  </div>
-                </Link>
+                    <div className="mt-3 pt-3 border-t border-edge flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-ink-mute">
+                      <span>Paid: <span className="text-mint-600 font-medium">{inr(d.total_paid)}</span></span>
+                      <span>Interest paid: <span className="text-sky-600 font-medium">{inr(d.total_interest_paid)}</span></span>
+                      <span>
+                        Unpaid interest: <span className="text-danger font-medium">{inr(unpaidInterest)}</span>
+                        {unpaidInterest > 0 && d.interest_start_month && d.interest_to_month && (
+                          <span className="text-ink-mute">
+                            {' '}({fmtMonthYear(d.interest_start_month)} – {fmtMonthYear(d.interest_to_month)} · {interestMonths} mo)
+                          </span>
+                        )}
+                      </span>
+                      <span className="ml-auto">Total owed: <span className="text-ink font-medium">{inr(totalOwed)}</span></span>
+                    </div>
+                  </Link>
+                </div>
               );
             })}
           </div>

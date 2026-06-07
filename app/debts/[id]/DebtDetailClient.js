@@ -368,6 +368,28 @@ export default function DebtDetailClient({ user, debtId }) {
     `Total owed (excluding current month interest): ${inr(totalOwed)}`,
     `Payable with current month interest: ${inr(payableThisMonth)}`,
   ].join('\n');
+  const shareSummaryText = `📋 Debt Summary
+━━━━━━━━━━━━━━━━━━━━━━━
+👤 Lender      : ${debt.lender_name}
+📅 Since       : ${fmtDate(debt.start_date)}${debt.target_date ? '\n🎯 Target      : ' + fmtDate(debt.target_date) : ''}
+💰 Principal   : ${inr(debt.principal)}
+📉 Current bal : ${inr(debt.current_principal)}
+📈 Interest    : ${debt.interest_rate}% /month (${inr(monthly)}/mo)
+✅ Total paid  : ${inr(debt.total_paid || 0)}
+⚠️  Unpaid int  : ${inr(unpaidInterest)}${debt.interest_start_month && debt.interest_to_month ? ` (${fmtMonthYear(debt.interest_start_month)} – ${fmtMonthYear(debt.interest_to_month)}, ${months} mo)` : ''}
+🏦 Total owed  : ${inr(totalOwed)}
+📊 Status      : ${statusLabel(debt.status)}
+━━━━━━━━━━━━━━━━━━━━━━━
+via My Debt Tracker`;
+
+  const handleCopyShareText = async () => {
+    try {
+      await navigator.clipboard.writeText(shareSummaryText);
+      toast('Summary copied for WhatsApp sharing.');
+    } catch (err) {
+      toast('Could not copy summary.', 'error');
+    }
+  };
 
   // Bar chart data for monthly breakdown (last 6 months)
   const barMaxVal = Math.max(Number(debt.principal), Number(debt.total_paid || 0), 1);
@@ -421,6 +443,14 @@ export default function DebtDetailClient({ user, debtId }) {
               title="Share as image">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/>
+              </svg>
+            </button>
+            <button onClick={handleCopyShareText}
+              className="w-9 h-9 rounded-xl border border-edge flex items-center justify-center text-ink-soft hover:bg-paper-tint transition"
+              title="Copy share summary">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
               </svg>
             </button>
             <button
@@ -808,28 +838,26 @@ export default function DebtDetailClient({ user, debtId }) {
         <section className="bg-paper-card border border-edge rounded-2xl p-4 md:p-5" ref={shareRef}>
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-sm font-medium">Shareable summary</h2>
-            <button onClick={handleShare}
-              className="btn-ghost text-xs py-1.5 px-3 rounded-lg flex items-center gap-1.5">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/>
-              </svg>
-              Share image
-            </button>
+            <div className="flex items-center gap-2">
+              <button onClick={handleCopyShareText}
+                className="btn-ghost text-xs py-1.5 px-3 rounded-lg flex items-center gap-1.5">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                </svg>
+                Copy text
+              </button>
+              <button onClick={handleShare}
+                className="btn-ghost text-xs py-1.5 px-3 rounded-lg flex items-center gap-1.5">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/>
+                </svg>
+                Share image
+              </button>
+            </div>
           </div>
           <div className="font-mono text-xs bg-paper-tint rounded-xl p-3 whitespace-pre-wrap text-ink-soft select-all">
-{`📋 Debt Summary
-━━━━━━━━━━━━━━━━━━━━━━━
-👤 Lender      : ${debt.lender_name}
-📅 Since       : ${fmtDate(debt.start_date)}${debt.target_date ? '\n🎯 Target      : ' + fmtDate(debt.target_date) : ''}
-💰 Principal   : ${inr(debt.principal)}
-📉 Current bal : ${inr(debt.current_principal)}
-📈 Interest    : ${debt.interest_rate}% /month (${inr(monthly)}/mo)
-✅ Total paid  : ${inr(debt.total_paid || 0)}
-⚠️  Unpaid int  : ${inr(unpaidInterest)}${debt.interest_start_month && debt.interest_to_month ? ` (${fmtMonthYear(debt.interest_start_month)} – ${fmtMonthYear(debt.interest_to_month)}, ${months} mo)` : ''}
-🏦 Total owed  : ${inr(totalOwed)}
-📊 Status      : ${statusLabel(debt.status)}
-━━━━━━━━━━━━━━━━━━━━━━━
-via My Debt Tracker`}
+{shareSummaryText}
           </div>
         </section>
 
