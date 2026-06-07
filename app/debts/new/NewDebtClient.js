@@ -13,6 +13,8 @@ export default function NewDebtClient({ user }) {
     principal: '',
     interest_rate: '',
     start_date: new Date().toISOString().slice(0, 10),
+    category: '',
+    priority: '',
     target_date: '',
     notes: '',
   });
@@ -38,6 +40,8 @@ export default function NewDebtClient({ user }) {
           principal: form.principal,
           interest_rate: form.interest_rate,
           start_date: form.start_date,
+          category: form.category || undefined,
+          priority: form.priority || undefined,
           target_date: form.target_date || undefined,
           notes: form.notes,
         }),
@@ -122,6 +126,34 @@ export default function NewDebtClient({ user }) {
               required
               className="field-input"
             />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs text-ink-soft mb-1.5">Category <span className="text-ink-mute">(optional)</span></label>
+              <input
+                type="text"
+                placeholder="e.g. Bank, Family"
+                value={form.category}
+                onChange={e => set('category', e.target.value)}
+                className="field-input"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs text-ink-soft mb-1.5">Priority <span className="text-ink-mute">(optional)</span></label>
+              <input
+                type="number"
+                inputMode="numeric"
+                min="1"
+                max="10"
+                step="1"
+                placeholder="1 = highest"
+                value={form.priority}
+                onChange={e => set('priority', e.target.value)}
+                className="field-input"
+              />
+            </div>
           </div>
 
           {/* Target date (optional) */}
