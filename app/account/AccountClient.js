@@ -38,13 +38,18 @@ export default function AccountClient({ user }) {
   };
 
   const submitPinChange = async (nextConfirmPin) => {
+    if (changingPin) return;
     try {
+      const payload = { currentPin, newPin, confirmPin: nextConfirmPin };
       setPinError('');
       setChangingPin(true);
+      setCurrentPin('');
+      setNewPin('');
+      setConfirmPin('');
       const res = await fetch('/api/account', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ currentPin, newPin, confirmPin: nextConfirmPin }),
+        body: JSON.stringify(payload),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Could not change PIN.');
