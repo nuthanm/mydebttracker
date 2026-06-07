@@ -37,10 +37,10 @@ export default function AccountClient({ user }) {
     setPinError('');
   };
 
-  const submitPinChange = async (nextConfirmPin) => {
+  const submitPinChange = async (confirmedPin) => {
     if (changingPin) return;
     try {
-      const payload = { currentPin, newPin, confirmPin: nextConfirmPin };
+      const payload = { currentPin, newPin, confirmPin: confirmedPin };
       setPinError('');
       setChangingPin(true);
       const res = await fetch('/api/account', {
@@ -62,25 +62,25 @@ export default function AccountClient({ user }) {
     }
   };
 
-  const onCurrentPinChange = (next) => {
-    setCurrentPin(next);
-    if (next.length === 6) {
+  const onCurrentPinChange = (pinValue) => {
+    setCurrentPin(pinValue);
+    if (pinValue.length === 6) {
       setPinError('');
       setPinStep('new');
     }
   };
 
-  const onNewPinChange = (next) => {
-    setNewPin(next);
-    if (next.length === 6) {
+  const onNewPinChange = (pinValue) => {
+    setNewPin(pinValue);
+    if (pinValue.length === 6) {
       setPinError('');
       setPinStep('confirm');
     }
   };
 
-  const onConfirmPinChange = (next) => {
-    setConfirmPin(next);
-    if (next.length === 6 && !changingPin) submitPinChange(next);
+  const onConfirmPinChange = (pinValue) => {
+    setConfirmPin(pinValue);
+    if (pinValue.length === 6 && !changingPin) submitPinChange(pinValue);
   };
 
   const handleLogout = async () => {

@@ -18,7 +18,7 @@ export async function PATCH(req) {
       return NextResponse.json({ error: 'New PIN must be different from current PIN.' }, { status: 400 });
     }
     if (newPin !== confirmPin) {
-      return NextResponse.json({ error: 'PINs do not match. Try again.' }, { status: 400 });
+      return NextResponse.json({ error: 'New PIN and confirmation PIN do not match.' }, { status: 400 });
     }
 
     const rows = await sql`SELECT pin_hash FROM users WHERE id = ${user.id} LIMIT 1`;
