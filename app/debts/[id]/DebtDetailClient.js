@@ -4,7 +4,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Shell from '@/components/Shell';
 import { toast } from '@/components/Toast';
-import { inr, inrShort, inrRaw, fmtDate, monthlyInterest, monthsElapsed, statusColor, statusLabel } from '@/lib/format';
+import { appConfirm } from '@/components/ConfirmDialog';
+import { inr, inrShort, inrRaw, fmtDate, fmtMonthYear, monthlyInterest, monthsElapsed, statusColor, statusLabel } from '@/lib/format';
 
 const PAYMENT_TYPES = [
   { value: 'interest',   label: 'Interest payment' },
@@ -31,12 +32,31 @@ export default function DebtDetailClient({ user, debtId }) {
   const [pSaving, setPSaving] = useState(false);
   const [pError, setPError] = useState('');
 
+  // Month-range interest payment
+  const [multiMonth, setMultiMonth] = useState(false);
+  const [rangeFrom, setRangeFrom] = useState('');
+  const [rangeTo, setRangeTo] = useState('');
+
+  // Edit debt form
+  const [showEdit, setShowEdit] = useState(false);
+  const [eForm, setEForm] = useState({ lender_name: '', interest_rate: '', target_date: '', notes: '' });
+  const [eSaving, setESaving] = useState(false);
+  const [eError, setEError] = useState('');
+
   const loadData = useCallback(async () => {
     const [dr, pr] = await Promise.all([
       fetch(`/api/debts/${debtId}`).then(r => r.json()),
       fetch(`/api/debts/${debtId}/payments`).then(r => r.json()),
     ]);
-    if (dr.debt) setDebt(dr.debt);
+    if (dr.debt) {
+      setDebt(dr.debt);
+      setEForm({
+        lender_name: dr.debt.lender_name || '',
+        interest_rate: dr.debt.interest_rate || '',
+        target_date: dr.debt.target_date ? dr.debt.target_date.slice(0, 10) : '',
+        notes: dr.debt.notes || '',
+      });
+    }
     if (pr.payments) setPayments(pr.payments);
     setLoading(false);
   }, [debtId]);
@@ -44,21 +64,52 @@ export default function DebtDetailClient({ user, debtId }) {
   useEffect(() => { loadData(); }, [loadData]);
 
   const setP = (k, v) => setPForm(f => ({ ...f, [k]: v }));
+  const setE = (k, v) => setEForm(f => ({ ...f, [k]: v }));
+
+  // When month range changes, auto-fill amount
+  useEffect(() => {
+    if (!multiMonth || !rangeFrom || !rangeTo || !debt) return;
+    const [fy, fm] = rangeFrom.split('-').map(Number);
+    const [ty, tm] = rangeTo.split('-').map(Number);
+    const numMonths = (ty - fy) * 12 + (tm - fm) + 1;
+    if (numMonths <= 0) return;
+    const monthly = monthlyInterest(debt.current_principal, debt.interest_rate);
+    setPForm(f => ({ ...f, amount: String(Math.round(monthly * numMonths)) }));
+  }, [multiMonth, rangeFrom, rangeTo, debt]);
 
   const handlePaymentSubmit = async (e) => {
     e.preventDefault();
     setPError('');
     setPSaving(true);
     try {
+      let submitForm = { ...pForm };
+
+      if (multiMonth && pForm.payment_type === 'interest') {
+        if (!rangeFrom || !rangeTo) throw new Error('Please select both from and to months.');
+        const [fy, fm] = rangeFrom.split('-').map(Number);
+        const [ty, tm] = rangeTo.split('-').map(Number);
+        if ((ty - fy) * 12 + (tm - fm) < 0) throw new Error('"To" month must be on or after "From" month.');
+        const fromLabel = new Date(fy, fm - 1, 1).toLocaleString('en-IN', { month: 'short', year: 'numeric' });
+        const toLabel   = new Date(ty, tm - 1, 1).toLocaleString('en-IN', { month: 'short', year: 'numeric' });
+        submitForm = {
+          ...submitForm,
+          payment_date: `${ty}-${String(tm).padStart(2, '0')}-01`,
+          notes: submitForm.notes || `Interest for ${fromLabel} – ${toLabel}`,
+        };
+      }
+
       const res = await fetch(`/api/debts/${debtId}/payments`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(pForm),
+        body: JSON.stringify(submitForm),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Could not record payment.');
       toast('Payment recorded!');
       setShowForm(false);
+      setMultiMonth(false);
+      setRangeFrom('');
+      setRangeTo('');
       setPForm({ payment_date: new Date().toISOString().slice(0, 10), payment_type: 'interest', amount: '', notes: '' });
       loadData();
     } catch (err) {
@@ -69,7 +120,7 @@ export default function DebtDetailClient({ user, debtId }) {
   };
 
   const handleDeletePayment = async (paymentId) => {
-    if (!confirm('Delete this payment record?')) return;
+    if (!await appConfirm('Delete this payment record?')) return;
     try {
       const res = await fetch(`/api/debts/${debtId}/payments/${paymentId}`, { method: 'DELETE' });
       if (!res.ok) throw new Error('Could not delete payment.');
@@ -81,7 +132,7 @@ export default function DebtDetailClient({ user, debtId }) {
   };
 
   const handleMarkCleared = async () => {
-    if (!confirm('Mark this debt as fully cleared?')) return;
+    if (!await appConfirm('Mark this debt as fully cleared?')) return;
     const res = await fetch(`/api/debts/${debtId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -92,10 +143,37 @@ export default function DebtDetailClient({ user, debtId }) {
   };
 
   const handleDeleteDebt = async () => {
-    if (!confirm('Delete this debt permanently? All payment records will also be deleted.')) return;
+    if (!await appConfirm('Delete this debt permanently? All payment records will also be deleted.')) return;
     const res = await fetch(`/api/debts/${debtId}`, { method: 'DELETE' });
     if (res.ok) { toast('Debt deleted.', 'info'); router.push('/debts'); }
     else toast('Could not delete.', 'error');
+  };
+
+  const handleEditSubmit = async (e) => {
+    e.preventDefault();
+    setEError('');
+    setESaving(true);
+    try {
+      const res = await fetch(`/api/debts/${debtId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          lender_name: eForm.lender_name,
+          interest_rate: eForm.interest_rate,
+          target_date: eForm.target_date || null,
+          notes: eForm.notes || null,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Could not update debt.');
+      toast('Debt updated!');
+      setShowEdit(false);
+      loadData();
+    } catch (err) {
+      setEError(err.message);
+    } finally {
+      setESaving(false);
+    }
   };
 
   // Share as image using Canvas API
@@ -268,6 +346,15 @@ export default function DebtDetailClient({ user, debtId }) {
             </p>
           </div>
           <div className="flex gap-2">
+            {/* Edit button */}
+            <button onClick={() => setShowEdit(v => !v)}
+              className="w-9 h-9 rounded-xl border border-edge flex items-center justify-center text-ink-soft hover:bg-paper-tint transition"
+              title="Edit debt">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
+                <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
+              </svg>
+            </button>
             <button onClick={handleShare}
               className="w-9 h-9 rounded-xl border border-edge flex items-center justify-center text-ink-soft hover:bg-paper-tint transition"
               title="Share as image">
@@ -284,6 +371,49 @@ export default function DebtDetailClient({ user, debtId }) {
             </button>
           </div>
         </div>
+
+        {/* Edit debt form */}
+        {showEdit && (
+          <form onSubmit={handleEditSubmit}
+            className="bg-paper-card border border-edge rounded-2xl p-4 space-y-4 anim-fade">
+            <h3 className="text-sm font-medium">Edit debt details</h3>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="col-span-2">
+                <label className="block text-xs text-ink-soft mb-1.5">Lender name<span className="text-danger ml-0.5">*</span></label>
+                <input type="text" value={eForm.lender_name}
+                  onChange={e => setE('lender_name', e.target.value)} required className="field-input" />
+              </div>
+              <div>
+                <label className="block text-xs text-ink-soft mb-1.5">Monthly interest rate (%)<span className="text-danger ml-0.5">*</span></label>
+                <input type="number" inputMode="decimal" min="0" step="0.01"
+                  value={eForm.interest_rate}
+                  onChange={e => setE('interest_rate', e.target.value)} required className="field-input" />
+              </div>
+              <div>
+                <label className="block text-xs text-ink-soft mb-1.5">Target date <span className="text-ink-mute">(optional)</span></label>
+                <input type="date" value={eForm.target_date}
+                  onChange={e => setE('target_date', e.target.value)} className="field-input" />
+              </div>
+              <div className="col-span-2">
+                <label className="block text-xs text-ink-soft mb-1.5">Notes <span className="text-ink-mute">(optional)</span></label>
+                <input type="text" value={eForm.notes}
+                  onChange={e => setE('notes', e.target.value)} className="field-input" />
+              </div>
+            </div>
+
+            {eError && <p className="text-xs text-danger">{eError}</p>}
+
+            <div className="flex gap-3">
+              <button type="button" onClick={() => setShowEdit(false)}
+                className="btn-ghost flex-1 py-2 rounded-lg text-sm">Cancel</button>
+              <button type="submit" disabled={eSaving}
+                className="btn-primary flex-1 py-2 rounded-lg text-sm font-medium">
+                {eSaving ? 'Saving…' : 'Save changes'}
+              </button>
+            </div>
+          </form>
+        )}
 
         {/* Stats grid */}
         <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
@@ -307,7 +437,9 @@ export default function DebtDetailClient({ user, debtId }) {
           <div className="bg-paper-card border border-edge rounded-xl p-3.5">
             <p className="text-[11px] text-ink-mute">Unpaid interest</p>
             <p className="text-base font-medium mt-1 text-danger">{inr(unpaidInterest)}</p>
-            <p className="text-[10px] text-ink-mute">over {months} months</p>
+            <p className="text-[10px] text-ink-mute">
+              {fmtMonthYear(debt.start_date)} – {fmtMonthYear(new Date())} ({months} mo)
+            </p>
           </div>
           <div className="bg-paper-card border border-edge rounded-xl p-3.5 bg-danger/5 border-danger/20">
             <p className="text-[11px] text-danger">Total owed now</p>
@@ -363,27 +495,12 @@ export default function DebtDetailClient({ user, debtId }) {
             className="bg-paper-card border border-edge rounded-2xl p-4 space-y-4 anim-fade">
             <h3 className="text-sm font-medium">Record payment</h3>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs text-ink-soft mb-1.5">Date<span className="text-danger ml-0.5">*</span></label>
-                <input type="date" value={pForm.payment_date}
-                  onChange={e => setP('payment_date', e.target.value)} required className="field-input" />
-              </div>
-              <div>
-                <label className="block text-xs text-ink-soft mb-1.5">Amount (₹)<span className="text-danger ml-0.5">*</span></label>
-                <input type="number" inputMode="numeric" min="1" step="1"
-                  placeholder={inrRaw(monthly)}
-                  value={pForm.amount}
-                  onChange={e => setP('amount', e.target.value)} required className="field-input" />
-              </div>
-            </div>
-
             <div>
               <label className="block text-xs text-ink-soft mb-1.5">Payment type<span className="text-danger ml-0.5">*</span></label>
               <div className="grid grid-cols-3 gap-2">
                 {PAYMENT_TYPES.map(t => (
                   <button key={t.value} type="button"
-                    onClick={() => setP('payment_type', t.value)}
+                    onClick={() => { setP('payment_type', t.value); setMultiMonth(false); }}
                     className={`chip text-xs ${pForm.payment_type === t.value ? 'on' : ''}`}>
                     {t.label}
                   </button>
@@ -397,16 +514,71 @@ export default function DebtDetailClient({ user, debtId }) {
               )}
             </div>
 
+            {/* Month-range toggle for interest */}
+            {pForm.payment_type === 'interest' && (
+              <div className="flex items-center gap-2">
+                <button type="button"
+                  onClick={() => { setMultiMonth(v => !v); setRangeFrom(''); setRangeTo(''); setP('amount', ''); }}
+                  className={`chip text-xs ${multiMonth ? 'on' : ''}`}>
+                  Cover multiple months
+                </button>
+                {multiMonth && (
+                  <span className="text-[11px] text-ink-mute">Select the month range you are paying for</span>
+                )}
+              </div>
+            )}
+
+            {/* Month range fields */}
+            {pForm.payment_type === 'interest' && multiMonth ? (
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs text-ink-soft mb-1.5">From month<span className="text-danger ml-0.5">*</span></label>
+                  <input type="month" value={rangeFrom}
+                    onChange={e => setRangeFrom(e.target.value)} required className="field-input" />
+                </div>
+                <div>
+                  <label className="block text-xs text-ink-soft mb-1.5">To month<span className="text-danger ml-0.5">*</span></label>
+                  <input type="month" value={rangeTo}
+                    onChange={e => setRangeTo(e.target.value)} required className="field-input" />
+                </div>
+              </div>
+            ) : (
+              <div>
+                <label className="block text-xs text-ink-soft mb-1.5">Date<span className="text-danger ml-0.5">*</span></label>
+                <input type="date" value={pForm.payment_date}
+                  onChange={e => setP('payment_date', e.target.value)} required className="field-input" />
+              </div>
+            )}
+
+            <div>
+              <label className="block text-xs text-ink-soft mb-1.5">Amount (₹)<span className="text-danger ml-0.5">*</span></label>
+              <input type="number" inputMode="numeric" min="1" step="1"
+                placeholder={inrRaw(monthly)}
+                value={pForm.amount}
+                onChange={e => setP('amount', e.target.value)} required className="field-input" />
+              {multiMonth && rangeFrom && rangeTo && (() => {
+                const [fy, fm] = rangeFrom.split('-').map(Number);
+                const [ty, tm] = rangeTo.split('-').map(Number);
+                const n = (ty - fy) * 12 + (tm - fm) + 1;
+                return n > 0 ? (
+                  <p className="text-[11px] text-ink-mute mt-1">
+                    {n} month{n > 1 ? 's' : ''} × {inr(monthly)} = <span className="text-danger font-medium">{inr(monthly * n)}</span>
+                  </p>
+                ) : null;
+              })()}
+            </div>
+
             <div>
               <label className="block text-xs text-ink-soft mb-1.5">Notes <span className="text-ink-mute">(optional)</span></label>
-              <input type="text" placeholder="e.g. July interest payment"
+              <input type="text"
+                placeholder={multiMonth && rangeFrom && rangeTo ? 'Auto-filled on save' : 'e.g. July interest payment'}
                 value={pForm.notes} onChange={e => setP('notes', e.target.value)} className="field-input" />
             </div>
 
             {pError && <p className="text-xs text-danger">{pError}</p>}
 
             <div className="flex gap-3">
-              <button type="button" onClick={() => setShowForm(false)}
+              <button type="button" onClick={() => { setShowForm(false); setMultiMonth(false); setRangeFrom(''); setRangeTo(''); }}
                 className="btn-ghost flex-1 py-2 rounded-lg text-sm">Cancel</button>
               <button type="submit" disabled={pSaving}
                 className="btn-primary flex-1 py-2 rounded-lg text-sm font-medium">
@@ -485,7 +657,7 @@ export default function DebtDetailClient({ user, debtId }) {
 📉 Current bal : ${inr(debt.current_principal)}
 📈 Interest    : ${debt.interest_rate}% /month (${inr(monthly)}/mo)
 ✅ Total paid  : ${inr(debt.total_paid || 0)}
-⚠️  Unpaid int  : ${inr(unpaidInterest)} (${months} months)
+⚠️  Unpaid int  : ${inr(unpaidInterest)} (${fmtMonthYear(debt.start_date)} – ${fmtMonthYear(new Date())}, ${months} mo)
 🏦 Total owed  : ${inr(totalOwed)}
 📊 Status      : ${statusLabel(debt.status)}
 ━━━━━━━━━━━━━━━━━━━━━━━

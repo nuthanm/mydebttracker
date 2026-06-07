@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import Shell from '@/components/Shell';
-import { inr, inrShort, fmtDate, monthlyInterest, monthsElapsed, statusColor, statusLabel } from '@/lib/format';
+import { inr, inrShort, fmtDate, fmtMonthYear, monthlyInterest, monthsElapsed, statusColor, statusLabel } from '@/lib/format';
 
 export default function DebtsClient({ user }) {
   const [debts, setDebts] = useState([]);
@@ -90,7 +90,7 @@ export default function DebtsClient({ user }) {
 
                   <div className="mt-3 pt-3 border-t border-edge flex gap-4 text-[11px] text-ink-mute">
                     <span>Paid: <span className="text-mint-600 font-medium">{inr(d.total_paid)}</span></span>
-                    <span>Unpaid interest: <span className="text-danger font-medium">{inr(unpaidInterest)}</span></span>
+                    <span>Unpaid interest: <span className="text-danger font-medium">{inr(unpaidInterest)}</span>{unpaidInterest > 0 && <span className="text-ink-mute"> (from {fmtMonthYear(d.start_date)})</span>}</span>
                     <span className="ml-auto">Total owed: <span className="text-ink font-medium">{inr(totalOwed)}</span></span>
                   </div>
                 </Link>
