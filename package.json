@@ -11,7 +11,7 @@
   "dependencies": {
     "@neondatabase/serverless": "^0.9.4",
     "bcryptjs": "^2.4.3",
-    "next": "14.2.33",
+    "next": "14.2.35",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },
