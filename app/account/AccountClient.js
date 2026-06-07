@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import Shell from '@/components/Shell';
+import PinInput from '@/components/PinInput';
 import { appConfirm } from '@/components/ConfirmDialog';
 import { toast } from '@/components/Toast';
 import { exportDashboardWorkbook } from '@/lib/export';
@@ -12,6 +13,75 @@ export default function AccountClient({ user }) {
   const [loading, setLoading] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [pinStep, setPinStep] = useState('idle');
+  const [currentPin, setCurrentPin] = useState('');
+  const [newPin, setNewPin] = useState('');
+  const [confirmPin, setConfirmPin] = useState('');
+  const [pinError, setPinError] = useState('');
+  const [changingPin, setChangingPin] = useState(false);
+
+  const resetPinFlow = () => {
+    setPinStep('idle');
+    setCurrentPin('');
+    setNewPin('');
+    setConfirmPin('');
+    setPinError('');
+    setChangingPin(false);
+  };
+
+  const startPinFlow = () => {
+    setPinStep('current');
+    setCurrentPin('');
+    setNewPin('');
+    setConfirmPin('');
+    setPinError('');
+  };
+
+  const submitPinChange = async (confirmedPin) => {
+    if (changingPin) return;
+    try {
+      const payload = { currentPin, newPin, confirmPin: confirmedPin };
+      setPinError('');
+      setChangingPin(true);
+      const res = await fetch('/api/account', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Could not change PIN.');
+      toast('PIN changed successfully.');
+      resetPinFlow();
+    } catch (err) {
+      setPinError(err.message || 'Could not change PIN.');
+      setChangingPin(false);
+      setPinStep('current');
+      setCurrentPin('');
+      setNewPin('');
+      setConfirmPin('');
+    }
+  };
+
+  const onCurrentPinChange = (pinValue) => {
+    setCurrentPin(pinValue);
+    if (pinValue.length === 6) {
+      setPinError('');
+      setPinStep('new');
+    }
+  };
+
+  const onNewPinChange = (pinValue) => {
+    setNewPin(pinValue);
+    if (pinValue.length === 6) {
+      setPinError('');
+      setPinStep('confirm');
+    }
+  };
+
+  const onConfirmPinChange = (pinValue) => {
+    setConfirmPin(pinValue);
+    if (pinValue.length === 6 && !changingPin) submitPinChange(pinValue);
+  };
 
   const handleLogout = async () => {
     setLoading(true);
@@ -90,9 +160,46 @@ export default function AccountClient({ user }) {
         </div>
 
         <div className="space-y-3">
+          <div className="bg-paper-card border border-edge rounded-2xl p-4">
+            {pinStep === 'idle' ? (
+              <button
+                onClick={startPinFlow}
+                disabled={loading || deleting || changingPin}
+                className="btn-ghost w-full py-2.5 rounded-lg text-sm font-medium"
+              >
+                Change PIN
+              </button>
+            ) : (
+              <>
+                <h2 className="text-sm font-medium text-center">
+                  {pinStep === 'current' ? 'Enter current PIN' : pinStep === 'new' ? 'Set new PIN' : 'Confirm new PIN'}
+                </h2>
+                <p className="text-xs text-ink-mute text-center mt-1 mb-4">
+                  {pinStep === 'current' ? 'Verify your current PIN first'
+                    : pinStep === 'new' ? 'Choose a 6-digit PIN'
+                      : 'Enter the same PIN again'}
+                </p>
+                <PinInput
+                  value={pinStep === 'current' ? currentPin : pinStep === 'new' ? newPin : confirmPin}
+                  onChange={pinStep === 'current' ? onCurrentPinChange : pinStep === 'new' ? onNewPinChange : onConfirmPinChange}
+                  autoFocus
+                />
+                {pinError && <p className="mt-3 text-xs text-danger text-center">{pinError}</p>}
+                {changingPin && <p className="mt-3 text-xs text-ink-mute text-center">Updating PIN…</p>}
+                <button
+                  type="button"
+                  onClick={resetPinFlow}
+                  className="text-xs text-ink-mute mt-4 mx-auto block"
+                >
+                  Cancel
+                </button>
+              </>
+            )}
+          </div>
+
           <button
             onClick={handleLogout}
-            disabled={loading || deleting}
+            disabled={loading || deleting || changingPin}
             className="btn-danger w-full py-2.5 rounded-lg text-sm font-medium">
             {loading ? 'Logging out…' : 'Log out'}
           </button>
@@ -106,14 +213,14 @@ export default function AccountClient({ user }) {
             <div className="mt-3 grid sm:grid-cols-2 gap-2">
               <button
                 onClick={handleExportData}
-                disabled={exporting || deleting}
+                disabled={exporting || deleting || changingPin}
                 className="btn-ghost py-2.5 rounded-lg text-sm"
               >
                 {exporting ? 'Exporting…' : 'Export your data'}
               </button>
               <button
                 onClick={handleDeleteAccount}
-                disabled={deleting || loading}
+                disabled={deleting || loading || changingPin}
                 className="btn-danger py-2.5 rounded-lg text-sm font-medium"
               >
                 {deleting ? 'Deleting…' : 'Delete account'}
