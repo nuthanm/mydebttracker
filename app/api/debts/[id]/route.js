@@ -30,15 +30,36 @@ export async function PATCH(req, { params }) {
 
   try {
     const body = await req.json();
-    const { lender_name, interest_rate, target_date, notes, status } = body;
+    const { lender_name, principal, interest_rate, target_date, notes, status } = body;
 
     const existing = await sql`SELECT * FROM debts WHERE id = ${params.id} AND user_id = ${user.id} LIMIT 1`;
     if (!existing.length) return NextResponse.json({ error: 'Not found.' }, { status: 404 });
     const debt = existing[0];
+    let principalValue = Number(debt.principal);
+    let currentPrincipalValue = Number(debt.current_principal);
+
+    if (principal !== undefined) {
+      const principalNum = parseFloat(principal);
+      if (isNaN(principalNum) || principalNum <= 0) {
+        return NextResponse.json({ error: 'principal must be a positive number.' }, { status: 400 });
+      }
+
+      const repaidRows = await sql`
+        SELECT COALESCE(SUM(amount), 0) AS total_repaid
+        FROM debt_payments
+        WHERE debt_id = ${params.id}
+          AND payment_type IN ('principal', 'clearance')
+      `;
+      const totalRepaid = Number(repaidRows[0].total_repaid);
+      principalValue = principalNum;
+      currentPrincipalValue = Math.max(0, principalNum - totalRepaid);
+    }
 
     const rows = await sql`
       UPDATE debts SET
         lender_name   = ${lender_name?.trim() ?? debt.lender_name},
+        principal     = ${principalValue},
+        current_principal = ${currentPrincipalValue},
         interest_rate = ${interest_rate !== undefined ? parseFloat(interest_rate) : debt.interest_rate},
         target_date   = ${target_date !== undefined ? (target_date || null) : debt.target_date},
         notes         = ${notes?.trim() !== undefined ? (notes?.trim() || null) : debt.notes},

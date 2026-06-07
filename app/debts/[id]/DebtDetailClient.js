@@ -47,7 +47,7 @@ export default function DebtDetailClient({ user, debtId }) {
 
   // Edit debt form
   const [showEdit, setShowEdit] = useState(false);
-  const [eForm, setEForm] = useState({ lender_name: '', interest_rate: '', target_date: '', notes: '' });
+  const [eForm, setEForm] = useState({ lender_name: '', principal: '', interest_rate: '', target_date: '', notes: '' });
   const [eSaving, setESaving] = useState(false);
   const [eError, setEError] = useState('');
 
@@ -60,6 +60,7 @@ export default function DebtDetailClient({ user, debtId }) {
       setDebt(dr.debt);
       setEForm({
         lender_name: dr.debt.lender_name || '',
+        principal: dr.debt.principal || '',
         interest_rate: dr.debt.interest_rate || '',
         target_date: dr.debt.target_date ? dr.debt.target_date.slice(0, 10) : '',
         notes: dr.debt.notes || '',
@@ -164,6 +165,7 @@ export default function DebtDetailClient({ user, debtId }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           lender_name: eForm.lender_name,
+          principal: eForm.principal,
           interest_rate: eForm.interest_rate,
           target_date: eForm.target_date || null,
           notes: eForm.notes || null,
@@ -388,6 +390,12 @@ export default function DebtDetailClient({ user, debtId }) {
                 <label className="block text-xs text-ink-soft mb-1.5">Lender name<span className="text-danger ml-0.5">*</span></label>
                 <input type="text" value={eForm.lender_name}
                   onChange={e => setE('lender_name', e.target.value)} required className="field-input" />
+              </div>
+              <div>
+                <label className="block text-xs text-ink-soft mb-1.5">Principal amount<span className="text-danger ml-0.5">*</span></label>
+                <input type="number" inputMode="decimal" min="0.01" step="0.01"
+                  value={eForm.principal}
+                  onChange={e => setE('principal', e.target.value)} required className="field-input" />
               </div>
               <div>
                 <label className="block text-xs text-ink-soft mb-1.5">Monthly interest rate (%)<span className="text-danger ml-0.5">*</span></label>
