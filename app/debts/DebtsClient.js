@@ -40,6 +40,7 @@ export default function DebtsClient({ user }) {
   const [viewMode, setViewMode] = useState('list');
   const [selectedIds, setSelectedIds] = useState([]);
   const [bulkCategory, setBulkCategory] = useState('');
+  const [bulkTag, setBulkTag] = useState('');
   const [bulkPriority, setBulkPriority] = useState('');
   const [bulkSaving, setBulkSaving] = useState(false);
 
@@ -108,8 +109,8 @@ export default function DebtsClient({ user }) {
       toast('Select at least one debt.', 'error');
       return;
     }
-    if (bulkCategory.trim() === '' && bulkPriority === '') {
-      toast('Choose a category or priority to update.', 'error');
+    if (bulkCategory.trim() === '' && bulkTag === '' && bulkPriority === '') {
+      toast('Choose a category, tag, or priority to update.', 'error');
       return;
     }
 
@@ -117,6 +118,7 @@ export default function DebtsClient({ user }) {
     try {
       const payload = {};
       if (bulkCategory.trim() !== '') payload.category = bulkCategory.trim();
+      if (bulkTag !== '') payload.instrument_tag = bulkTag === 'none' ? null : bulkTag;
       if (bulkPriority !== '') payload.priority = bulkPriority === 'none' ? null : Number(bulkPriority);
 
       const responses = await Promise.all(
@@ -146,6 +148,7 @@ export default function DebtsClient({ user }) {
       }
 
       setBulkCategory('');
+      setBulkTag('');
       setBulkPriority('');
       loadDebts();
     } catch (err) {
@@ -176,8 +179,19 @@ export default function DebtsClient({ user }) {
                 href={`/debts/${debt.id}`}
                 className={`block rounded-2xl border px-4 py-3 ${alertTone(debt.urgency_status)}`}
               >
-                <p className="text-sm font-medium">{debt.lender_name}</p>
-                <p className="text-xs mt-1">{debt.urgency_message} · target {fmtDate(debt.target_date)}</p>
+                <div className="flex items-start gap-3">
+                  <span className="text-danger mt-0.5" aria-hidden="true">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+                      <line x1="12" y1="9" x2="12" y2="13" />
+                      <line x1="12" y1="17" x2="12.01" y2="17" />
+                    </svg>
+                  </span>
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium">{debt.lender_name}</p>
+                    <p className="text-xs mt-1">{debt.urgency_message} · target {fmtDate(debt.target_date)}</p>
+                  </div>
+                </div>
               </Link>
             ))}
           </div>
@@ -226,8 +240,8 @@ export default function DebtsClient({ user }) {
           </div>
         </div>
 
-        <section className="bg-paper-card border border-edge rounded-2xl p-3 mb-4">
-          <div className="grid md:grid-cols-[auto,1fr,180px,150px,auto] gap-2 items-center">
+        <section className="bg-paper-card border border-edge rounded-2xl p-3.5 mb-4">
+          <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-[auto,minmax(0,1fr),180px,180px,auto,auto] items-center">
             <label className="flex items-center gap-2 text-xs text-ink-soft">
               <input type="checkbox" checked={allVisibleSelected} onChange={toggleSelectAllVisible} className="accent-ink" />
               Select visible
@@ -239,6 +253,13 @@ export default function DebtsClient({ user }) {
               placeholder="Bulk category (leave blank to skip)"
               className="field-input"
             />
+            <select value={bulkTag} onChange={(e) => setBulkTag(e.target.value)} className="field-input">
+              <option value="">Bulk tag (skip)</option>
+              <option value="none">Clear tag</option>
+              <option value="temp">Temp</option>
+              <option value="short_term">Short term</option>
+              <option value="long_term">Long term</option>
+            </select>
             <select value={bulkPriority} onChange={(e) => setBulkPriority(e.target.value)} className="field-input">
               <option value="">Bulk priority (skip)</option>
               <option value="none">Clear priority</option>
