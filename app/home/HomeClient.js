@@ -13,12 +13,20 @@ function alertTone(status) {
     : 'bg-honey-50 border-honey-600/20 text-honey-600';
 }
 
+function instrumentTagLabel(value) {
+  if (value === 'temp') return 'Temp';
+  if (value === 'short_term') return 'Short term';
+  if (value === 'long_term') return 'Long term';
+  return value || '';
+}
+
 function debtTooltip(debt) {
   return [
     `${debt.lender_name}`,
     `Outstanding: ${inr(debt.outstanding_total || 0)}`,
     `Current principal: ${inr(debt.current_principal || 0)}`,
     `Monthly interest: ${inr(debt.current_monthly_interest || 0)}`,
+    debt.instrument_tag ? `Debt tag: ${instrumentTagLabel(debt.instrument_tag)}` : null,
     `Interest paid: ${inr(debt.total_interest_paid || 0)}`,
     `Paid so far: ${inr(debt.total_paid || 0)}`,
     `Unpaid interest: ${inr(debt.unpaid_interest || 0)}`,
@@ -30,10 +38,12 @@ function debtTooltip(debt) {
 export default function HomeClient({ user }) {
   const [debts, setDebts] = useState([]);
   const [categories, setCategories] = useState([]);
+  const [instrumentTags, setInstrumentTags] = useState([]);
   const [summary, setSummary] = useState(null);
   const [dashboard, setDashboard] = useState(null);
   const [loading, setLoading] = useState(true);
   const [categoryFilter, setCategoryFilter] = useState('all');
+  const [tagFilter, setTagFilter] = useState('all');
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
   const [exporting, setExporting] = useState(false);
@@ -42,6 +52,7 @@ export default function HomeClient({ user }) {
     setLoading(true);
     const params = new URLSearchParams();
     if (categoryFilter !== 'all') params.set('category', categoryFilter);
+    if (tagFilter !== 'all') params.set('instrument_tag', tagFilter);
     if (fromDate) params.set('from_date', fromDate);
     if (toDate) params.set('to_date', toDate);
 
@@ -50,11 +61,12 @@ export default function HomeClient({ user }) {
       .then((data) => {
         setDebts(data.debts || []);
         setCategories(data.categories || []);
+        setInstrumentTags(data.instrument_tags || []);
         setSummary(data.summary || null);
         setDashboard(data.dashboard || null);
         setLoading(false);
       });
-  }, [categoryFilter, fromDate, toDate]);
+  }, [categoryFilter, tagFilter, fromDate, toDate]);
 
   useEffect(() => {
     loadDashboard();
@@ -79,6 +91,7 @@ export default function HomeClient({ user }) {
         dashboard: dashboard || {},
         filters: {
           category: categoryFilter,
+          instrument_tag: tagFilter,
           from_date: fromDate,
           to_date: toDate,
         },
@@ -125,16 +138,25 @@ export default function HomeClient({ user }) {
             </div>
 
             <div className="flex flex-col gap-2 lg:items-end">
-              <div className="grid sm:grid-cols-3 gap-2">
+              <div className="grid sm:grid-cols-4 gap-2">
                 <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)} className="field-input min-w-[160px]">
                   <option value="all">All categories</option>
                   {categories.map((category) => (
                     <option key={category} value={category}>{category}</option>
                   ))}
                 </select>
+                <select value={tagFilter} onChange={(e) => setTagFilter(e.target.value)} className="field-input min-w-[140px]">
+                  <option value="all">All tags</option>
+                  {instrumentTags.map((tag) => (
+                    <option key={tag} value={tag}>{instrumentTagLabel(tag)}</option>
+                  ))}
+                </select>
                 <input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className="field-input" />
                 <input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className="field-input" />
               </div>
+              <p className="text-[11px] text-ink-mute">
+                Use debt tags (Temp, Short term, Long term) to quickly filter the dashboard to matching instruments only.
+              </p>
               <div className="flex gap-2 justify-end">
                 <button onClick={handleExport} disabled={exporting} className="btn-ghost py-2 px-4 rounded-full text-sm">
                   {exporting ? 'Exporting…' : 'Export Excel'}
@@ -200,7 +222,11 @@ export default function HomeClient({ user }) {
                         <div className="fill-bar h-full bg-danger rounded-full group-hover:bg-ember-600 transition-colors" style={{ width: `${pct}%` }} />
                       </div>
                       <div className="flex justify-between text-[10px] text-ink-mute mt-1">
-                        <span>{debt.category || 'Uncategorized'}{debt.priority != null ? ` · P${debt.priority}` : ''}</span>
+                        <span>
+                          {debt.category || 'Uncategorized'}
+                          {debt.instrument_tag ? ` · ${instrumentTagLabel(debt.instrument_tag)}` : ''}
+                          {debt.priority != null ? ` · P${debt.priority}` : ''}
+                        </span>
                         <span>{inrShort(debt.current_monthly_interest)}/mo</span>
                       </div>
                     </Link>

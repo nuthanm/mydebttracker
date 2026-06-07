@@ -14,6 +14,7 @@ import {
   enrichDebtWithDashboardMetrics,
   ensureDebtMetadataColumns,
   normalizeDebtCategory,
+  normalizeDebtInstrumentTag,
   normalizeDebtPriority,
 } from '@/lib/debtDashboard';
 
@@ -81,7 +82,7 @@ export async function PATCH(req, { params }) {
     ]);
 
     const body = await req.json();
-    const { lender_name, principal, interest_rate, rate_effective_month, target_date, category, priority, notes, status } = body;
+    const { lender_name, principal, interest_rate, rate_effective_month, target_date, category, instrument_tag, priority, notes, status } = body;
 
     const existing = await sql`SELECT * FROM debts WHERE id = ${params.id} AND user_id = ${user.id} LIMIT 1`;
     if (!existing.length) return NextResponse.json({ error: 'Not found.' }, { status: 404 });
@@ -90,12 +91,16 @@ export async function PATCH(req, { params }) {
     const nextRate = interest_rate !== undefined ? parseFloat(interest_rate) : currentRate;
     const nextPriority = priority !== undefined ? normalizeDebtPriority(priority) : (debt.priority == null ? null : Number(debt.priority));
     const nextCategory = category !== undefined ? normalizeDebtCategory(category) : debt.category;
+    const nextInstrumentTag = instrument_tag !== undefined ? normalizeDebtInstrumentTag(instrument_tag) : debt.instrument_tag;
 
     if (interest_rate !== undefined && (Number.isNaN(nextRate) || nextRate < 0)) {
       return NextResponse.json({ error: 'interest_rate must be a non-negative number.' }, { status: 400 });
     }
     if (Number.isNaN(nextPriority)) {
       return NextResponse.json({ error: 'priority must be between 1 and 10.' }, { status: 400 });
+    }
+    if (Number.isNaN(nextInstrumentTag)) {
+      return NextResponse.json({ error: 'instrument_tag must be one of temp, short_term, long_term.' }, { status: 400 });
     }
 
     const rateHasChanged = interest_rate !== undefined && nextRate !== currentRate;
@@ -150,6 +155,7 @@ export async function PATCH(req, { params }) {
           interest_rate = ${nextRate},
           target_date   = ${target_date !== undefined ? (target_date || null) : debt.target_date},
           category      = ${nextCategory},
+          instrument_tag = ${nextInstrumentTag},
           priority      = ${nextPriority},
           notes         = ${notes?.trim() !== undefined ? (notes?.trim() || null) : debt.notes},
           status        = ${status ?? debt.status}
@@ -163,6 +169,7 @@ export async function PATCH(req, { params }) {
           interest_rate = ${nextRate},
           target_date   = ${target_date !== undefined ? (target_date || null) : debt.target_date},
           category      = ${nextCategory},
+          instrument_tag = ${nextInstrumentTag},
           priority      = ${nextPriority},
           notes         = ${notes?.trim() !== undefined ? (notes?.trim() || null) : debt.notes},
           status        = ${status ?? debt.status}

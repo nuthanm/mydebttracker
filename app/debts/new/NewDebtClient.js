@@ -6,6 +6,13 @@ import Shell from '@/components/Shell';
 import { toast } from '@/components/Toast';
 import { inr, monthlyInterest } from '@/lib/format';
 
+const INSTRUMENT_TAG_OPTIONS = [
+  { value: '', label: 'Select tag' },
+  { value: 'temp', label: 'Temp' },
+  { value: 'short_term', label: 'Short term' },
+  { value: 'long_term', label: 'Long term' },
+];
+
 export default function NewDebtClient({ user }) {
   const router = useRouter();
   const [form, setForm] = useState({
@@ -14,6 +21,7 @@ export default function NewDebtClient({ user }) {
     interest_rate: '',
     start_date: new Date().toISOString().slice(0, 10),
     category: '',
+    instrument_tag: '',
     priority: '',
     target_date: '',
     notes: '',
@@ -41,6 +49,7 @@ export default function NewDebtClient({ user }) {
           interest_rate: form.interest_rate,
           start_date: form.start_date,
           category: form.category || undefined,
+          instrument_tag: form.instrument_tag || undefined,
           priority: form.priority || undefined,
           target_date: form.target_date || undefined,
           notes: form.notes,
@@ -138,6 +147,18 @@ export default function NewDebtClient({ user }) {
                 onChange={e => set('category', e.target.value)}
                 className="field-input"
               />
+            </div>
+            <div>
+              <label className="block text-xs text-ink-soft mb-1.5">Debt tag <span className="text-ink-mute">(optional)</span></label>
+              <select
+                value={form.instrument_tag}
+                onChange={e => set('instrument_tag', e.target.value)}
+                className="field-input"
+              >
+                {INSTRUMENT_TAG_OPTIONS.map((option) => (
+                  <option key={option.value || 'blank'} value={option.value}>{option.label}</option>
+                ))}
+              </select>
             </div>
 
             <div>

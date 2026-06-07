@@ -6,6 +6,13 @@ import Shell from '@/components/Shell';
 import { inr, inrShort, fmtDate, fmtMonthYear, statusColor, statusLabel } from '@/lib/format';
 import { getAccruedMonthsCount } from '@/lib/debtInterest';
 
+function instrumentTagLabel(value) {
+  if (value === 'temp') return 'Temp';
+  if (value === 'short_term') return 'Short term';
+  if (value === 'long_term') return 'Long term';
+  return value || '';
+}
+
 function alertTone(status) {
   return status === 'overdue'
     ? 'bg-danger/10 border-danger/20 text-danger'
@@ -15,10 +22,12 @@ function alertTone(status) {
 export default function DebtsClient({ user }) {
   const [debts, setDebts] = useState([]);
   const [categories, setCategories] = useState([]);
+  const [instrumentTags, setInstrumentTags] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('all'); // all | active | cleared
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
+  const [tagFilter, setTagFilter] = useState('all');
 
   useEffect(() => {
     fetch('/api/debts')
@@ -26,6 +35,7 @@ export default function DebtsClient({ user }) {
       .then((data) => {
         setDebts(data.debts || []);
         setCategories(data.categories || []);
+        setInstrumentTags(data.instrument_tags || []);
         setLoading(false);
       });
   }, []);
@@ -38,10 +48,11 @@ export default function DebtsClient({ user }) {
   const filtered = debts
     .filter(d => filter === 'all' ? true : filter === 'active' ? d.status === 'active' : d.status === 'cleared')
     .filter(d => categoryFilter === 'all' ? true : d.category === categoryFilter)
+    .filter(d => tagFilter === 'all' ? true : d.instrument_tag === tagFilter)
     .filter(d => {
       const term = search.trim().toLowerCase();
       if (!term) return true;
-      return [d.lender_name, d.notes, d.category]
+      return [d.lender_name, d.notes, d.category, instrumentTagLabel(d.instrument_tag)]
         .filter(Boolean)
         .some((value) => value.toLowerCase().includes(term));
     });
@@ -75,7 +86,7 @@ export default function DebtsClient({ user }) {
           </div>
         )}
 
-        <div className="grid md:grid-cols-[1fr,180px] gap-3 mb-4">
+        <div className="grid md:grid-cols-[1fr,180px,180px] gap-3 mb-4">
           <input
             type="search"
             value={search}
@@ -87,6 +98,12 @@ export default function DebtsClient({ user }) {
             <option value="all">All categories</option>
             {categories.map((category) => (
               <option key={category} value={category}>{category}</option>
+            ))}
+          </select>
+          <select value={tagFilter} onChange={(e) => setTagFilter(e.target.value)} className="field-input">
+            <option value="all">All tags</option>
+            {instrumentTags.map((tag) => (
+              <option key={tag} value={tag}>{instrumentTagLabel(tag)}</option>
             ))}
           </select>
         </div>
@@ -145,6 +162,11 @@ export default function DebtsClient({ user }) {
                         {d.category && (
                           <span className="text-[10px] px-2 py-0.5 rounded-full bg-sky-50 text-sky-700 font-medium">
                             {d.category}
+                          </span>
+                        )}
+                        {d.instrument_tag && (
+                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 font-medium">
+                            {instrumentTagLabel(d.instrument_tag)}
                           </span>
                         )}
                         {d.priority != null && (
