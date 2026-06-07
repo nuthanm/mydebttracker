@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import Toaster from './Toast';
+import ConfirmDialog from './ConfirmDialog';
 
 const NAV_ITEMS = [
   { key: 'home',    label: 'Home',    href: '/home',    icon: 'home' },
@@ -27,6 +28,7 @@ export default function Shell({ children, user }) {
   return (
     <div className="min-h-screen flex flex-col md:flex-row">
       <Toaster />
+      <ConfirmDialog />
 
       {/* Desktop sidebar */}
       <aside className="hidden md:flex md:flex-col md:w-60 md:border-r md:border-edge md:bg-paper-tint md:px-3 md:py-5">
