@@ -41,7 +41,7 @@ export default function DebtsClient({ user }) {
             type="search"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search lender or notes"
+            placeholder="Search by lender or notes"
             className="field-input"
           />
         </div>
