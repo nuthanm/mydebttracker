@@ -43,9 +43,6 @@ export default function AccountClient({ user }) {
       const payload = { currentPin, newPin, confirmPin: nextConfirmPin };
       setPinError('');
       setChangingPin(true);
-      setCurrentPin('');
-      setNewPin('');
-      setConfirmPin('');
       const res = await fetch('/api/account', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -167,7 +164,7 @@ export default function AccountClient({ user }) {
             {pinStep === 'idle' ? (
               <button
                 onClick={startPinFlow}
-                disabled={loading || deleting}
+                disabled={loading || deleting || changingPin}
                 className="btn-ghost w-full py-2.5 rounded-lg text-sm font-medium"
               >
                 Change PIN
