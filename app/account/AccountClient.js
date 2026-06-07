@@ -37,14 +37,14 @@ export default function AccountClient({ user }) {
     setPinError('');
   };
 
-  const submitPinChange = async (nextPin) => {
+  const submitPinChange = async (nextConfirmPin) => {
     try {
       setPinError('');
       setChangingPin(true);
       const res = await fetch('/api/account', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ currentPin, newPin: nextPin }),
+        body: JSON.stringify({ currentPin, newPin, confirmPin: nextConfirmPin }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Could not change PIN.');
@@ -70,27 +70,15 @@ export default function AccountClient({ user }) {
 
   const onNewPinChange = (next) => {
     setNewPin(next);
-    if (next.length !== 6) return;
-    if (next === currentPin) {
-      setPinError('New PIN must be different from current PIN.');
-      setNewPin('');
-      return;
+    if (next.length === 6) {
+      setPinError('');
+      setPinStep('confirm');
     }
-    setPinError('');
-    setPinStep('confirm');
   };
 
   const onConfirmPinChange = (next) => {
     setConfirmPin(next);
-    if (next.length !== 6 || changingPin) return;
-    if (next !== newPin) {
-      setPinError('PINs do not match. Try again.');
-      setConfirmPin('');
-      setNewPin('');
-      setPinStep('new');
-      return;
-    }
-    submitPinChange(next);
+    if (next.length === 6 && !changingPin) submitPinChange(next);
   };
 
   const handleLogout = async () => {

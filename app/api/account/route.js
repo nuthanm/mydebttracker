@@ -7,15 +7,18 @@ export async function PATCH(req) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   try {
-    const { currentPin, newPin } = await req.json();
-    if (!currentPin || !newPin) {
-      return NextResponse.json({ error: 'Current PIN and new PIN are required.' }, { status: 400 });
+    const { currentPin, newPin, confirmPin } = await req.json();
+    if (!currentPin || !newPin || !confirmPin) {
+      return NextResponse.json({ error: 'Current PIN, new PIN and confirmation PIN are required.' }, { status: 400 });
     }
-    if (!validatePin(currentPin) || !validatePin(newPin)) {
+    if (!validatePin(currentPin) || !validatePin(newPin) || !validatePin(confirmPin)) {
       return NextResponse.json({ error: 'PIN must be exactly 6 digits.' }, { status: 400 });
     }
     if (currentPin === newPin) {
       return NextResponse.json({ error: 'New PIN must be different from current PIN.' }, { status: 400 });
+    }
+    if (newPin !== confirmPin) {
+      return NextResponse.json({ error: 'PINs do not match. Try again.' }, { status: 400 });
     }
 
     const rows = await sql`SELECT pin_hash FROM users WHERE id = ${user.id} LIMIT 1`;
