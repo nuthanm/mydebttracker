@@ -92,7 +92,7 @@ export async function PATCH(req, { params }) {
       const currentMonth = normalizeEffectiveMonth(getCurrentMonth());
       if (firstInterestMonth && compareEffectiveMonths(effectiveMonth, firstInterestMonth) < 0) effectiveMonth = firstInterestMonth;
       if (currentMonth && compareEffectiveMonths(effectiveMonth, currentMonth) > 0) {
-        return NextResponse.json({ error: 'effective month cannot be in the future.' }, { status: 400 });
+        return NextResponse.json({ error: 'Effective month cannot be in the future.' }, { status: 400 });
       }
     }
 
