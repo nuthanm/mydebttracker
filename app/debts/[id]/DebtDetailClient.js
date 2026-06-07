@@ -358,12 +358,15 @@ export default function DebtDetailClient({ user, debtId }) {
   const months = getAccruedMonthsCount(debt.interest_start_month, debt.interest_to_month);
   const monthly = Number(debt.current_monthly_interest || 0);
   const unpaidInterest = Number(debt.unpaid_interest || 0);
+  const principalPaid = Number(debt.total_principal_paid || 0);
+  const interestPaid = Number(debt.total_interest_paid || 0);
+  const totalPaid = Number(debt.total_paid || 0);
   const totalOwed = Number(debt.current_principal) + unpaidInterest;
   const payableThisMonth = totalOwed + monthly;
   const detailTooltip = [
     `Monthly interest: ${inr(monthly)}`,
-    `Interest paid: ${inr(debt.total_interest_paid || 0)}`,
-    `Principal paid: ${inr(debt.total_principal_paid || 0)}`,
+    `Interest paid: ${inr(interestPaid)}`,
+    `Principal paid: ${inr(principalPaid)}`,
     `Unpaid interest: ${inr(unpaidInterest)}`,
     `Total owed (excluding current month interest): ${inr(totalOwed)}`,
     `Payable with current month interest: ${inr(payableThisMonth)}`,
@@ -375,7 +378,9 @@ export default function DebtDetailClient({ user, debtId }) {
 💰 Principal   : ${inr(debt.principal)}
 📉 Current bal : ${inr(debt.current_principal)}
 📈 Interest    : ${debt.interest_rate}% /month (${inr(monthly)}/mo)
-✅ Total paid  : ${inr(debt.total_paid || 0)}
+✅ Paid total  : ${inr(totalPaid)}
+🏦 Principal pd: ${inr(principalPaid)}
+💠 Interest pd : ${inr(interestPaid)}
 ⚠️  Unpaid int  : ${inr(unpaidInterest)}${debt.interest_start_month && debt.interest_to_month ? ` (${fmtMonthYear(debt.interest_start_month)} – ${fmtMonthYear(debt.interest_to_month)}, ${months} mo)` : ''}
 🏦 Total owed  : ${inr(totalOwed)}
 📊 Status      : ${statusLabel(debt.status)}
@@ -581,8 +586,12 @@ via My Debt Tracker`;
             <p className="text-[10px] text-ink-mute">{debt.interest_rate}% /month</p>
           </div>
           <div className="bg-paper-card border border-edge rounded-xl p-3.5">
-            <p className="text-[11px] text-ink-mute">Total paid so far</p>
-            <p className="text-base font-medium mt-1 text-mint-600">{inr(debt.total_paid || 0)}</p>
+            <p className="text-[11px] text-ink-mute">Principal paid since borrowing</p>
+            <p className="text-base font-medium mt-1 text-mint-600">{inr(principalPaid)}</p>
+          </div>
+          <div className="bg-paper-card border border-edge rounded-xl p-3.5">
+            <p className="text-[11px] text-ink-mute">Interest paid since borrowing</p>
+            <p className="text-base font-medium mt-1 text-sky-600">{inr(interestPaid)}</p>
           </div>
           <div className="bg-paper-card border border-edge rounded-xl p-3.5">
             <p className="text-[11px] text-ink-mute">Category</p>

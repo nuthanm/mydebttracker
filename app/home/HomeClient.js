@@ -60,6 +60,7 @@ export default function HomeClient({ user }) {
   const [insightView, setInsightView] = useState('current');
   const [exporting, setExporting] = useState(false);
   const [outflowExporting, setOutflowExporting] = useState(false);
+  const [showAllAlerts, setShowAllAlerts] = useState(false);
 
   const loadDashboard = useCallback(() => {
     setLoading(true);
@@ -90,6 +91,8 @@ export default function HomeClient({ user }) {
   const activeDebts = useMemo(() => debts.filter((debt) => debt.status === 'active'), [debts]);
   const empty = !loading && debts.length === 0;
   const alerts = dashboard?.alerts || [];
+  const visibleAlerts = showAllAlerts ? alerts : alerts.slice(0, 2);
+  const hiddenAlertsCount = Math.max(0, alerts.length - visibleAlerts.length);
   const byOutstanding = dashboard?.by_outstanding || [];
   const byInterest = dashboard?.by_monthly_interest || [];
   const byPriority = dashboard?.by_priority || [];
@@ -193,51 +196,81 @@ export default function HomeClient({ user }) {
               <p className="text-sm mt-1.5 text-danger">+ {inr(summary.total_unpaid_interest)} unpaid interest</p>
             </div>
 
-            <div className="flex flex-col gap-2 lg:items-end">
-              <div className="grid sm:grid-cols-5 gap-2">
-                <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)} className="field-input min-w-[150px]">
-                  <option value="all">All categories</option>
-                  {categories.map((category) => (
-                    <option key={category} value={category}>{category}</option>
-                  ))}
-                </select>
-                <select value={tagFilter} onChange={(e) => setTagFilter(e.target.value)} className="field-input min-w-[130px]">
-                  <option value="all">All tags</option>
-                  {instrumentTags.map((tag) => (
-                    <option key={tag} value={tag}>{instrumentTagLabel(tag)}</option>
-                  ))}
-                </select>
-                <select value={priorityFilter} onChange={(e) => setPriorityFilter(e.target.value)} className="field-input min-w-[120px]">
-                  <option value="all">All priorities</option>
-                  <option value="none">No priority</option>
-                  {priorities.map((priority) => (
-                    <option key={priority} value={priority}>P{priority}</option>
-                  ))}
-                </select>
-                <input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className="field-input" />
-                <input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className="field-input" />
-              </div>
-              <div className="flex gap-2 justify-end flex-wrap">
-                <button onClick={handleExport} disabled={exporting} className="btn-ghost py-2 px-4 rounded-full text-sm">
-                  {exporting ? 'Exporting…' : 'Export Excel'}
-                </button>
-                <Link href="/debts" className="btn-ghost py-2 px-4 rounded-full text-sm">See all debts</Link>
-                <Link href="/debts/new" className="inline-flex items-center gap-1.5 btn-primary py-2 px-4 rounded-full text-sm font-medium">
-                  + Add debt
-                </Link>
+            <div className="flex-1 max-w-3xl">
+              <div className="bg-paper-card border border-edge rounded-2xl p-3.5 md:p-4 space-y-3">
+                <div className="grid sm:grid-cols-2 xl:grid-cols-5 gap-2">
+                  <label className="text-[11px] text-ink-mute">
+                    Category
+                    <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)} className="field-input mt-1 min-w-0">
+                      <option value="all">All categories</option>
+                      {categories.map((category) => (
+                        <option key={category} value={category}>{category}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="text-[11px] text-ink-mute">
+                    Tag
+                    <select value={tagFilter} onChange={(e) => setTagFilter(e.target.value)} className="field-input mt-1 min-w-0">
+                      <option value="all">All tags</option>
+                      {instrumentTags.map((tag) => (
+                        <option key={tag} value={tag}>{instrumentTagLabel(tag)}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="text-[11px] text-ink-mute">
+                    Priority
+                    <select value={priorityFilter} onChange={(e) => setPriorityFilter(e.target.value)} className="field-input mt-1 min-w-0">
+                      <option value="all">All priorities</option>
+                      <option value="none">No priority</option>
+                      {priorities.map((priority) => (
+                        <option key={priority} value={priority}>P{priority}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="text-[11px] text-ink-mute">
+                    From date
+                    <input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className="field-input mt-1" />
+                  </label>
+                  <label className="text-[11px] text-ink-mute">
+                    To date
+                    <input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className="field-input mt-1" />
+                  </label>
+                </div>
+                <div className="flex gap-2 justify-end flex-wrap">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCategoryFilter('all');
+                      setTagFilter('all');
+                      setPriorityFilter('all');
+                      setFromDate(DEFAULT_RANGE_DATE);
+                      setToDate(DEFAULT_RANGE_DATE);
+                    }}
+                    className="btn-ghost py-2 px-4 rounded-full text-sm"
+                  >
+                    Reset filters
+                  </button>
+                  <button onClick={handleExport} disabled={exporting} className="btn-ghost py-2 px-4 rounded-full text-sm">
+                    {exporting ? 'Exporting…' : 'Export Excel'}
+                  </button>
+                  <Link href="/debts" className="btn-ghost py-2 px-4 rounded-full text-sm">See all debts</Link>
+                  <Link href="/debts/new" className="inline-flex items-center gap-1.5 btn-primary py-2 px-4 rounded-full text-sm font-medium">
+                    + Add debt
+                  </Link>
+                </div>
               </div>
             </div>
           </div>
 
           {alerts.length > 0 && (
-            <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-              {alerts.map((debt) => (
+            <section className="space-y-2">
+              {visibleAlerts.map((debt) => (
                 <Link
                   key={debt.id}
                   href={`/debts/${debt.id}`}
-                  className={`rounded-2xl border px-4 py-3 ${alertTone(debt.urgency_status)}`}
+                  className={`block rounded-2xl border px-4 py-3 ${alertTone(debt.urgency_status)}`}
                 >
-                  <div className="flex items-start gap-2">
+                  <div className="flex items-start justify-between gap-3">
                     <span className="text-danger mt-0.5" aria-hidden="true">
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
@@ -245,13 +278,25 @@ export default function HomeClient({ user }) {
                         <line x1="12" y1="17" x2="12.01" y2="17" />
                       </svg>
                     </span>
-                    <div>
+                    <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium">{debt.lender_name}</p>
                       <p className="text-xs mt-1">{debt.urgency_message} · target {fmtDate(debt.target_date)}</p>
                     </div>
+                    <span className="text-[10px] font-medium bg-paper-card/70 border border-edge rounded-full px-2 py-0.5 whitespace-nowrap">
+                      {debt.priority !== null && debt.priority !== undefined ? `P${debt.priority}` : 'No priority'}
+                    </span>
                   </div>
                 </Link>
               ))}
+              {alerts.length > 2 && (
+                <button
+                  type="button"
+                  onClick={() => setShowAllAlerts((value) => !value)}
+                  className="text-xs text-sky-600 hover:text-sky-700"
+                >
+                  {showAllAlerts ? 'Show less' : `Show ${hiddenAlertsCount} more alert${hiddenAlertsCount > 1 ? 's' : ''}`}
+                </button>
+              )}
             </section>
           )}
 
@@ -304,6 +349,21 @@ export default function HomeClient({ user }) {
                     ))}
                   </div>
                 </div>
+              ) : insightView === 'bar' ? (
+                <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 items-end min-h-[190px]">
+                  {byOutstanding.slice(0, 6).map((debt) => {
+                    const height = pct(debt.outstanding_total, maxOutstanding);
+                    return (
+                      <Link key={debt.id} href={`/debts/${debt.id}`} className="flex flex-col items-center gap-1.5 min-w-0">
+                        <span className="text-[10px] font-medium text-ink-soft">{inrShort(debt.outstanding_total)}</span>
+                        <div className="w-full h-28 bg-paper-tint rounded-md overflow-hidden flex items-end">
+                          <div className="w-full bg-danger/85 rounded-md" style={{ height: `${height}%` }} />
+                        </div>
+                        <span className="text-[10px] text-ink-mute text-center leading-tight w-full truncate">{debt.lender_name}</span>
+                      </Link>
+                    );
+                  })}
+                </div>
               ) : (
                 <div className="space-y-3">
                   {byOutstanding.slice(0, 6).map((debt) => {
@@ -341,6 +401,21 @@ export default function HomeClient({ user }) {
                       <p key={debt.id} className="text-xs flex justify-between"><span className="truncate pr-3">{debt.lender_name}</span><span>{inrShort(debt.current_monthly_interest)}</span></p>
                     ))}
                   </div>
+                </div>
+              ) : insightView === 'bar' ? (
+                <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 items-end min-h-[190px]">
+                  {byInterest.slice(0, 6).map((debt) => {
+                    const height = pct(debt.current_monthly_interest, maxMonthlyInterest);
+                    return (
+                      <Link key={debt.id} href={`/debts/${debt.id}`} className="flex flex-col items-center gap-1.5 min-w-0">
+                        <span className="text-[10px] font-medium text-ink-soft">{inrShort(debt.current_monthly_interest)}</span>
+                        <div className="w-full h-28 bg-paper-tint rounded-md overflow-hidden flex items-end">
+                          <div className="w-full bg-sky-600/85 rounded-md" style={{ height: `${height}%` }} />
+                        </div>
+                        <span className="text-[10px] text-ink-mute text-center leading-tight w-full truncate">{debt.lender_name}</span>
+                      </Link>
+                    );
+                  })}
                 </div>
               ) : (
                 <div className="space-y-3">
