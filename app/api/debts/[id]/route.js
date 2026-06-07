@@ -3,6 +3,7 @@ import { getCurrentUser } from '@/lib/auth';
 import { sql } from '@/lib/db';
 import {
   calculateDebtInterestSummary,
+  compareEffectiveMonths,
   ensureDebtRateChangesTable,
   ensureInitialRateChange,
   getCurrentMonth,
@@ -89,8 +90,8 @@ export async function PATCH(req, { params }) {
 
       const firstInterestMonth = normalizeEffectiveMonth(getFirstInterestMonth(debt.start_date));
       const currentMonth = normalizeEffectiveMonth(getCurrentMonth());
-      if (firstInterestMonth && effectiveMonth < firstInterestMonth) effectiveMonth = firstInterestMonth;
-      if (currentMonth && effectiveMonth > currentMonth) {
+      if (firstInterestMonth && compareEffectiveMonths(effectiveMonth, firstInterestMonth) < 0) effectiveMonth = firstInterestMonth;
+      if (currentMonth && compareEffectiveMonths(effectiveMonth, currentMonth) > 0) {
         return NextResponse.json({ error: 'effective month cannot be in the future.' }, { status: 400 });
       }
     }
