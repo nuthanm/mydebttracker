@@ -90,7 +90,12 @@ export async function PATCH(req, { params }) {
 
       const firstInterestMonth = normalizeEffectiveMonth(getFirstInterestMonth(debt.start_date));
       const currentMonth = normalizeEffectiveMonth(getCurrentMonth());
-      if (firstInterestMonth && compareEffectiveMonths(effectiveMonth, firstInterestMonth) < 0) effectiveMonth = firstInterestMonth;
+      if (firstInterestMonth && compareEffectiveMonths(effectiveMonth, firstInterestMonth) < 0) {
+        return NextResponse.json(
+          { error: `Effective month cannot be earlier than ${firstInterestMonth.slice(0, 7)}.` },
+          { status: 400 }
+        );
+      }
       if (currentMonth && compareEffectiveMonths(effectiveMonth, currentMonth) > 0) {
         return NextResponse.json({ error: 'Effective month cannot be in the future.' }, { status: 400 });
       }
