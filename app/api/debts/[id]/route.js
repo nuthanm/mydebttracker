@@ -153,9 +153,9 @@ export async function PATCH(req, { params }) {
             { status: 400 }
           );
         }
-        if (principalNum < totalTopup) {
+        if (totalTopup > 0 && principalNum <= totalTopup) {
           return NextResponse.json(
-            { error: `principal cannot be less than extra borrowed amount already recorded (${totalTopup.toFixed(2)}).` },
+            { error: `principal must stay greater than extra borrowed amount already recorded (${totalTopup.toFixed(2)}).` },
             { status: 400 }
           );
         }

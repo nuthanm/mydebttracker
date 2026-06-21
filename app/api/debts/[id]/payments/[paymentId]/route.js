@@ -29,10 +29,10 @@ export async function DELETE(req, { params }) {
     const remainingTopup = remainingTransactions
       .filter((entry) => entry.payment_type === 'topup')
       .reduce((sum, entry) => sum + Number(entry.amount || 0), 0);
-    const totalTopupEver = remainingTopup + (p.payment_type === 'topup' ? Number(p.amount || 0) : 0);
+    const totalTopupIncludingDeleted = remainingTopup + (p.payment_type === 'topup' ? Number(p.amount || 0) : 0);
     // Stored principal already includes every top-up ever recorded, including the
     // entry being deleted, so subtract all top-ups to recover the original base.
-    const initialPrincipal = Math.max(0, Number(debt[0].principal || 0) - totalTopupEver);
+    const initialPrincipal = Math.max(0, Number(debt[0].principal || 0) - totalTopupIncludingDeleted);
 
     let currentPrincipal = initialPrincipal;
     let nextStatus = debt[0].status === 'cleared' ? 'cleared' : 'active';
@@ -50,6 +50,8 @@ export async function DELETE(req, { params }) {
       }
     }
 
+    // Any remaining balance means the debt is active again, even if an older
+    // clearance record still exists in the history.
     const finalStatus = currentPrincipal === 0 ? nextStatus : 'active';
 
     await sql`
