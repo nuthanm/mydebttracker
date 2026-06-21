@@ -263,7 +263,7 @@ export default function DebtDetailClient({ user, debtId }) {
     const totalOwed = Number(debt.current_principal) + unpaid;
 
     const stats = [
-      { label: 'Total Borrowed (incl. top-ups)', value: inr(debt.principal) },
+      { label: 'Total Borrowed', value: inr(debt.principal) },
       { label: 'Current Principal', value: inr(debt.current_principal) },
       { label: 'Monthly Interest', value: inr(monthly) + ' @ ' + debt.interest_rate + '% /mo' },
       { label: 'Total Paid', value: inr(debt.total_paid || 0) },
@@ -379,7 +379,7 @@ export default function DebtDetailClient({ user, debtId }) {
 👤 Lender      : ${debt.lender_name}
 📅 Since       : ${fmtDate(debt.start_date)}${debt.target_date ? '\n🎯 Target      : ' + fmtDate(debt.target_date) : ''}
 💰 Borrowed    : ${inr(debt.principal)}
-➕ Extra later : ${inr(totalTopupAmount)}
+➕ Borrowed later: ${inr(totalTopupAmount)}
 📉 Current bal : ${inr(debt.current_principal)}
 📈 Interest    : ${debt.interest_rate}% /month (${inr(monthly)}/mo)
 ✅ Paid total  : ${inr(totalPaid)}
