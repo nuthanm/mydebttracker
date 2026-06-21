@@ -33,7 +33,7 @@ export async function POST(req, { params }) {
     if (!payment_date || !payment_type || !amount) {
       return NextResponse.json({ error: 'payment_date, payment_type and amount are required.' }, { status: 400 });
     }
-    const validTypes = ['interest', 'principal', 'clearance'];
+    const validTypes = ['interest', 'principal', 'clearance', 'topup'];
     if (!validTypes.includes(payment_type)) {
       return NextResponse.json({ error: `payment_type must be one of: ${validTypes.join(', ')}` }, { status: 400 });
     }
@@ -49,17 +49,26 @@ export async function POST(req, { params }) {
       RETURNING *
     `;
 
-    // If principal repayment: reduce current_principal; if clearance: mark debt as cleared
+    // Update debt balances for principal-affecting entries.
     if (payment_type === 'principal') {
       const newPrincipal = Math.max(0, Number(debt.current_principal) - amountNum);
       await sql`UPDATE debts SET current_principal = ${newPrincipal} WHERE id = ${params.id}`;
     } else if (payment_type === 'clearance') {
       await sql`UPDATE debts SET current_principal = 0, status = 'cleared' WHERE id = ${params.id}`;
+    } else if (payment_type === 'topup') {
+      await sql`
+        UPDATE debts
+        SET
+          principal = ${Number(debt.principal) + amountNum},
+          current_principal = ${Number(debt.current_principal) + amountNum},
+          status = 'active'
+        WHERE id = ${params.id}
+      `;
     }
 
     return NextResponse.json({ payment: rows[0] }, { status: 201 });
   } catch (err) {
     console.error('POST /api/debts/[id]/payments error', err);
-    return NextResponse.json({ error: 'Could not record payment.' }, { status: 500 });
+    return NextResponse.json({ error: 'Could not record transaction.' }, { status: 500 });
   }
 }

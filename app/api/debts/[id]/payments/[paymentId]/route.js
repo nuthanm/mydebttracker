@@ -16,28 +16,50 @@ export async function DELETE(req, { params }) {
   const p = payment[0];
   await sql`DELETE FROM debt_payments WHERE id = ${params.paymentId}`;
 
-  // Recalculate current_principal from all remaining principal payments
-  // to ensure correctness regardless of deletion order.
-  if (p.payment_type === 'principal' || p.payment_type === 'clearance') {
-    const remaining = await sql`
-      SELECT COALESCE(SUM(amount), 0) AS total_repaid
+  // Recalculate balances from remaining principal-affecting records.
+  if (['principal', 'clearance', 'topup'].includes(p.payment_type)) {
+    const remainingTransactions = await sql`
+      SELECT payment_date, payment_type, amount, created_at
       FROM debt_payments
       WHERE debt_id = ${params.id}
-        AND payment_type IN ('principal', 'clearance')
+        AND payment_type IN ('principal', 'clearance', 'topup')
+      ORDER BY payment_date ASC, created_at ASC
     `;
-    const totalRepaid = Number(remaining[0].total_repaid);
-    const newPrincipal = Math.max(0, Number(debt[0].principal) - totalRepaid);
 
-    // Only keep debt cleared if a clearance payment still exists
-    const clearanceLeft = await sql`
-      SELECT COUNT(*) AS cnt FROM debt_payments
-      WHERE debt_id = ${params.id} AND payment_type = 'clearance'
-    `;
-    const newStatus = Number(clearanceLeft[0].cnt) > 0 ? 'cleared' : 'active';
+    const remainingTopup = remainingTransactions
+      .filter((entry) => entry.payment_type === 'topup')
+      .reduce((sum, entry) => sum + Number(entry.amount || 0), 0);
+    const totalTopupBeforeDeletion = remainingTopup + (p.payment_type === 'topup' ? Number(p.amount || 0) : 0);
+    // Stored principal already includes every top-up ever recorded, including the
+    // entry being deleted, so subtract all top-ups to recover the original base.
+    const initialPrincipal = Math.max(0, Number(debt[0].principal || 0) - totalTopupBeforeDeletion);
+
+    let currentPrincipal = initialPrincipal;
+    let nextStatus = debt[0].status === 'cleared' ? 'cleared' : 'active';
+
+    for (const entry of remainingTransactions) {
+      const amount = Number(entry.amount || 0);
+      if (entry.payment_type === 'topup') {
+        currentPrincipal += amount;
+        nextStatus = 'active';
+      } else if (entry.payment_type === 'clearance') {
+        currentPrincipal = 0;
+        nextStatus = 'cleared';
+      } else {
+        currentPrincipal = Math.max(0, currentPrincipal - amount);
+      }
+    }
+
+    // If a later top-up reintroduced outstanding principal after a prior
+    // clearance, the debt becomes active again because money is owed again.
+    const finalStatus = currentPrincipal === 0 ? nextStatus : 'active';
 
     await sql`
       UPDATE debts
-      SET current_principal = ${newPrincipal}, status = ${newStatus}
+      SET
+        principal = ${initialPrincipal + remainingTopup},
+        current_principal = ${currentPrincipal},
+        status = ${finalStatus}
       WHERE id = ${params.id}
     `;
   }

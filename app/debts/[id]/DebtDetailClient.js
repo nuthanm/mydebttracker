@@ -13,6 +13,7 @@ const PAYMENT_TYPES = [
   { value: 'interest',   label: 'Interest payment' },
   { value: 'principal',  label: 'Principal repayment' },
   { value: 'clearance',  label: 'Full clearance' },
+  { value: 'topup',      label: 'Borrowed more' },
 ];
 const INSTRUMENT_TAG_OPTIONS = [
   { value: '', label: 'Select tag' },
@@ -139,8 +140,8 @@ export default function DebtDetailClient({ user, debtId }) {
         body: JSON.stringify(submitForm),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Could not record payment.');
-      toast('Payment recorded!');
+      if (!res.ok) throw new Error(data.error || 'Could not record transaction.');
+      toast('Transaction recorded!');
       setShowForm(false);
       setMultiMonth(false);
       setRangeFrom('');
@@ -159,7 +160,7 @@ export default function DebtDetailClient({ user, debtId }) {
     try {
       const res = await fetch(`/api/debts/${debtId}/payments/${paymentId}`, { method: 'DELETE' });
       if (!res.ok) throw new Error('Could not delete payment.');
-      toast('Payment deleted.', 'info');
+      toast('Record deleted.', 'info');
       loadData();
     } catch (err) {
       toast(err.message, 'error');
@@ -262,7 +263,7 @@ export default function DebtDetailClient({ user, debtId }) {
     const totalOwed = Number(debt.current_principal) + unpaid;
 
     const stats = [
-      { label: 'Original Principal', value: inr(debt.principal) },
+      { label: 'Total Borrowed', value: inr(debt.principal) },
       { label: 'Current Principal', value: inr(debt.current_principal) },
       { label: 'Monthly Interest', value: inr(monthly) + ' @ ' + debt.interest_rate + '% /mo' },
       { label: 'Total Paid', value: inr(debt.total_paid || 0) },
@@ -360,6 +361,7 @@ export default function DebtDetailClient({ user, debtId }) {
   const unpaidInterest = Number(debt.unpaid_interest || 0);
   const principalPaid = Number(debt.total_principal_paid || 0);
   const interestPaid = Number(debt.total_interest_paid || 0);
+  const totalTopupAmount = Number(debt.total_topup_amount || 0);
   const totalPaid = Number(debt.total_paid || 0);
   const totalOwed = Number(debt.current_principal) + unpaidInterest;
   const payableThisMonth = totalOwed + monthly;
@@ -367,6 +369,7 @@ export default function DebtDetailClient({ user, debtId }) {
     `Monthly interest: ${inr(monthly)}`,
     `Interest paid: ${inr(interestPaid)}`,
     `Principal paid: ${inr(principalPaid)}`,
+    `Borrowed later: ${inr(totalTopupAmount)}`,
     `Unpaid interest: ${inr(unpaidInterest)}`,
     `Total owed (excluding current month interest): ${inr(totalOwed)}`,
     `Payable with current month interest: ${inr(payableThisMonth)}`,
@@ -375,7 +378,8 @@ export default function DebtDetailClient({ user, debtId }) {
 ━━━━━━━━━━━━━━━━━━━━━━━
 👤 Lender      : ${debt.lender_name}
 📅 Since       : ${fmtDate(debt.start_date)}${debt.target_date ? '\n🎯 Target      : ' + fmtDate(debt.target_date) : ''}
-💰 Principal   : ${inr(debt.principal)}
+💰 Borrowed    : ${inr(debt.principal)}
+➕ Borrowed later: ${inr(totalTopupAmount)}
 📉 Current bal : ${inr(debt.current_principal)}
 📈 Interest    : ${debt.interest_rate}% /month (${inr(monthly)}/mo)
 ✅ Paid total  : ${inr(totalPaid)}
@@ -573,12 +577,16 @@ via My Debt Tracker`;
         {/* Stats grid */}
         <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
           <div className="bg-paper-card border border-edge rounded-xl p-3.5">
-            <p className="text-[11px] text-ink-mute">Original principal</p>
+            <p className="text-[11px] text-ink-mute">Total borrowed</p>
             <p className="text-base font-medium mt-1">{inr(debt.principal)}</p>
           </div>
           <div className="bg-paper-card border border-edge rounded-xl p-3.5">
             <p className="text-[11px] text-ink-mute">Current principal</p>
             <p className="text-base font-medium mt-1">{inr(debt.current_principal)}</p>
+          </div>
+          <div className="bg-paper-card border border-edge rounded-xl p-3.5">
+            <p className="text-[11px] text-ink-mute">Borrowed later</p>
+            <p className="text-base font-medium mt-1 text-plum-600">{inr(totalTopupAmount)}</p>
           </div>
           <div className="bg-paper-card border border-edge rounded-xl p-3.5">
             <p className="text-[11px] text-ink-mute">Monthly interest</p>
@@ -660,7 +668,8 @@ via My Debt Tracker`;
           <h2 className="text-sm font-medium mb-4">Overview</h2>
           <div className="flex items-end gap-4 h-28">
             {[
-              { label: 'Principal', val: Number(debt.current_principal), color: 'bg-danger' },
+              { label: 'Current principal', val: Number(debt.current_principal), color: 'bg-danger' },
+              { label: 'Borrowed later', val: totalTopupAmount, color: 'bg-plum-600' },
               { label: 'Interest paid', val: Number(debt.total_interest_paid || 0), color: 'bg-sky-600' },
               { label: 'Principal paid', val: Number(debt.total_principal_paid || 0), color: 'bg-mint-600' },
               { label: 'Unpaid interest', val: unpaidInterest, color: 'bg-honey-600' },
@@ -687,7 +696,7 @@ via My Debt Tracker`;
           <button
             onClick={() => setShowForm(v => !v)}
             className="btn-primary py-2 px-4 rounded-lg text-sm font-medium">
-            {showForm ? 'Cancel' : '+ Record payment'}
+            {showForm ? 'Cancel' : '+ Record entry'}
           </button>
           {debt.status === 'active' && (
             <button onClick={handleMarkCleared}
@@ -701,11 +710,11 @@ via My Debt Tracker`;
         {showForm && (
           <form onSubmit={handlePaymentSubmit}
             className="bg-paper-card border border-edge rounded-2xl p-4 space-y-4 anim-fade">
-            <h3 className="text-sm font-medium">Record payment</h3>
+            <h3 className="text-sm font-medium">Record debt entry</h3>
 
             <div>
-              <label className="block text-xs text-ink-soft mb-1.5">Payment type<span className="text-danger ml-0.5">*</span></label>
-              <div className="grid grid-cols-3 gap-2">
+              <label className="block text-xs text-ink-soft mb-1.5">Entry type<span className="text-danger ml-0.5">*</span></label>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
                 {PAYMENT_TYPES.map(t => (
                   <button key={t.value} type="button"
                     onClick={() => { setP('payment_type', t.value); setMultiMonth(false); }}
@@ -719,6 +728,9 @@ via My Debt Tracker`;
               )}
               {pForm.payment_type === 'clearance' && (
                 <p className="text-[11px] text-mint-600 mt-1.5">Full clearance will mark this debt as settled.</p>
+              )}
+              {pForm.payment_type === 'topup' && (
+                <p className="text-[11px] text-plum-600 mt-1.5">This adds extra borrowed amount to the same debt and increases future interest on the higher balance.</p>
               )}
             </div>
 
@@ -797,10 +809,10 @@ via My Debt Tracker`;
 
         {/* Payment history */}
         <section className="bg-paper-card border border-edge rounded-2xl p-4 md:p-5">
-          <h2 className="text-sm font-medium mb-3">Payment history</h2>
+          <h2 className="text-sm font-medium mb-3">Transaction history</h2>
 
           {payments.length === 0 ? (
-            <p className="text-sm text-ink-mute text-center py-6">No payments recorded yet.</p>
+            <p className="text-sm text-ink-mute text-center py-6">No entries recorded yet.</p>
           ) : (
             <div className="divide-y divide-edge">
               {payments.map(p => {
@@ -808,11 +820,13 @@ via My Debt Tracker`;
                   interest:  'bg-sky-50 text-sky-600',
                   principal: 'bg-mint-50 text-mint-600',
                   clearance: 'bg-plum-50 text-plum-600',
+                  topup: 'bg-plum-50 text-plum-600',
                 };
                 const typeLabels = {
                   interest:  'Interest',
                   principal: 'Principal',
                   clearance: 'Clearance',
+                  topup: 'Borrowed more',
                 };
                 return (
                   <div key={p.id} className="py-3 flex items-center justify-between gap-2">
@@ -830,7 +844,7 @@ via My Debt Tracker`;
                       <button
                         onClick={() => handleDeletePayment(p.id)}
                         className="w-6 h-6 rounded flex items-center justify-center text-ink-mute hover:text-danger hover:bg-danger/10 transition"
-                        title="Delete payment">
+                        title="Delete record">
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                           <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
                         </svg>
