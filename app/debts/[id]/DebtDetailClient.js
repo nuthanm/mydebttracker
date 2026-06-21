@@ -579,7 +579,6 @@ via My Debt Tracker`;
           <div className="bg-paper-card border border-edge rounded-xl p-3.5">
             <p className="text-[11px] text-ink-mute">Total borrowed</p>
             <p className="text-base font-medium mt-1">{inr(debt.principal)}</p>
-            <p className="text-[10px] text-ink-mute mt-1">Initial amount plus any later top-ups.</p>
           </div>
           <div className="bg-paper-card border border-edge rounded-xl p-3.5">
             <p className="text-[11px] text-ink-mute">Current principal</p>
