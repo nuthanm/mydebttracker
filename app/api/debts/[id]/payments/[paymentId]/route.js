@@ -30,6 +30,8 @@ export async function DELETE(req, { params }) {
       .filter((entry) => entry.payment_type === 'topup')
       .reduce((sum, entry) => sum + Number(entry.amount || 0), 0);
     const deletedTopupAmount = p.payment_type === 'topup' ? Number(p.amount || 0) : 0;
+    // Stored principal already includes every top-up ever recorded, including the
+    // entry being deleted, so subtract all top-ups to recover the original base.
     const initialPrincipal = Math.max(0, Number(debt[0].principal || 0) - remainingTopup - deletedTopupAmount);
 
     let currentPrincipal = initialPrincipal;

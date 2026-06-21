@@ -263,7 +263,7 @@ export default function DebtDetailClient({ user, debtId }) {
     const totalOwed = Number(debt.current_principal) + unpaid;
 
     const stats = [
-      { label: 'Total Borrowed', value: inr(debt.principal) },
+      { label: 'Total Borrowed (incl. top-ups)', value: inr(debt.principal) },
       { label: 'Current Principal', value: inr(debt.current_principal) },
       { label: 'Monthly Interest', value: inr(monthly) + ' @ ' + debt.interest_rate + '% /mo' },
       { label: 'Total Paid', value: inr(debt.total_paid || 0) },
@@ -579,6 +579,7 @@ via My Debt Tracker`;
           <div className="bg-paper-card border border-edge rounded-xl p-3.5">
             <p className="text-[11px] text-ink-mute">Total borrowed</p>
             <p className="text-base font-medium mt-1">{inr(debt.principal)}</p>
+            <p className="text-[10px] text-ink-mute mt-1">Includes any extra amount borrowed later.</p>
           </div>
           <div className="bg-paper-card border border-edge rounded-xl p-3.5">
             <p className="text-[11px] text-ink-mute">Current principal</p>
@@ -714,7 +715,7 @@ via My Debt Tracker`;
 
             <div>
               <label className="block text-xs text-ink-soft mb-1.5">Entry type<span className="text-danger ml-0.5">*</span></label>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
                 {PAYMENT_TYPES.map(t => (
                   <button key={t.value} type="button"
                     onClick={() => { setP('payment_type', t.value); setMultiMonth(false); }}
