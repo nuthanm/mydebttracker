@@ -58,7 +58,8 @@ export async function GET(req) {
       COALESCE(SUM(p.amount) FILTER (WHERE p.payment_type = 'interest'), 0) AS total_interest_paid,
       COALESCE(SUM(p.amount) FILTER (WHERE p.payment_type = 'principal'), 0) AS total_principal_paid,
       COALESCE(SUM(p.amount) FILTER (WHERE p.payment_type = 'clearance'), 0) AS total_clearance_paid,
-      COALESCE(SUM(p.amount), 0) AS total_paid
+      COALESCE(SUM(p.amount), 0) AS total_paid,
+      MAX(p.payment_date) AS last_payment_date
     FROM debts d
     LEFT JOIN debt_payments p ON p.debt_id = d.id
     WHERE d.user_id = ${user.id}

@@ -30,6 +30,25 @@ function todayInput() {
 }
 const DEFAULT_RANGE_DATE = todayInput();
 
+function toPaymentDateStr(value) {
+  return value ? String(value).slice(0, 10) : null;
+}
+
+function getPaymentScheduleStatus(debt) {
+  const now = new Date();
+  const currentYM = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const lastPaymentDate = toPaymentDateStr(debt.last_payment_date);
+  const paidThisMonth = lastPaymentDate ? lastPaymentDate.slice(0, 7) === currentYM : false;
+
+  if (debt.urgency_status === 'overdue') return 'overdue';
+  if (paidThisMonth) return 'paid';
+  if (debt.urgency_status === 'upcoming') return 'near';
+  if (!paidThisMonth && Number(debt.unpaid_interest || 0) > 0) return 'overdue';
+  return 'neutral';
+}
+
+const PAYMENT_SCHEDULE_RANK = { overdue: 0, near: 1, neutral: 2, paid: 3 };
+
 function pieGradient(items, key) {
   const total = items.reduce((sum, item) => sum + Number(item[key] || 0), 0);
   if (!total) return 'conic-gradient(#E2DDCB 0 100%)';
@@ -89,6 +108,11 @@ export default function HomeClient({ user }) {
   }, [loadDashboard]);
 
   const activeDebts = useMemo(() => debts.filter((debt) => debt.status === 'active'), [debts]);
+  const paymentSchedule = useMemo(() => {
+    return activeDebts
+      .map((debt) => ({ ...debt, _scheduleStatus: getPaymentScheduleStatus(debt) }))
+      .sort((a, b) => (PAYMENT_SCHEDULE_RANK[a._scheduleStatus] ?? 9) - (PAYMENT_SCHEDULE_RANK[b._scheduleStatus] ?? 9));
+  }, [activeDebts]);
   const empty = !loading && debts.length === 0;
   const alerts = dashboard?.alerts || [];
   const visibleAlerts = showAllAlerts ? alerts : alerts.slice(0, 2);
@@ -297,6 +321,94 @@ export default function HomeClient({ user }) {
                   {showAllAlerts ? 'Show less' : `Show ${hiddenAlertsCount} more alert${hiddenAlertsCount > 1 ? 's' : ''}`}
                 </button>
               )}
+            </section>
+          )}
+
+          {paymentSchedule.length > 0 && (
+            <section className="bg-paper-card border border-edge rounded-2xl p-4 md:p-5">
+              <div className="flex justify-between items-baseline mb-4">
+                <h2 className="text-sm font-medium">Payment Schedule</h2>
+                <span className="text-[11px] text-ink-mute">All active debts</span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+                {paymentSchedule.map((debt) => {
+                  const status = debt._scheduleStatus;
+                  const tileClass =
+                    status === 'overdue'
+                      ? 'border-danger/40 bg-danger/5'
+                      : status === 'near'
+                        ? 'border-honey-500/40 bg-honey-50'
+                        : status === 'paid'
+                          ? 'border-mint-600/30 bg-mint-50'
+                          : 'border-edge bg-paper-tint';
+                  const labelClass =
+                    status === 'overdue'
+                      ? 'text-danger bg-danger/10'
+                      : status === 'near'
+                        ? 'text-honey-700 bg-honey-100'
+                        : status === 'paid'
+                          ? 'text-mint-700 bg-mint-100'
+                          : 'text-ink-mute bg-paper-card';
+                  const statusLabel =
+                    status === 'overdue'
+                      ? 'Overdue'
+                      : status === 'near'
+                        ? 'Due soon'
+                        : status === 'paid'
+                          ? 'Paid'
+                          : 'Scheduled';
+                  const lastPayDate = debt.last_payment_date
+                    ? toPaymentDateStr(debt.last_payment_date)
+                    : null;
+                  return (
+                    <Link
+                      key={debt.id}
+                      href={`/debts/${debt.id}`}
+                      className={`block rounded-xl border p-3 hover:opacity-90 transition-opacity ${tileClass}`}
+                    >
+                      <div className="flex items-start justify-between gap-2 mb-2">
+                        <p className="text-sm font-medium truncate">{debt.lender_name}</p>
+                        <span className={`flex items-center gap-1 text-[11px] font-medium rounded-full px-2 py-0.5 whitespace-nowrap flex-shrink-0 ${labelClass}`}>
+                          {status === 'overdue' && (
+                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                              <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+                              <line x1="12" y1="9" x2="12" y2="13" />
+                              <line x1="12" y1="17" x2="12.01" y2="17" />
+                            </svg>
+                          )}
+                          {status === 'paid' && (
+                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                              <polyline points="20 6 9 17 4 12" />
+                            </svg>
+                          )}
+                          {statusLabel}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-end gap-2">
+                        <div className="min-w-0">
+                          <p className="text-[11px] text-ink-mute truncate">{debt.category || 'Uncategorized'}{debt.instrument_tag ? ` · ${instrumentTagLabel(debt.instrument_tag)}` : ''}</p>
+                          {status === 'overdue' && Number(debt.unpaid_interest || 0) > 0 && (
+                            <p className="text-xs text-danger mt-0.5">Unpaid interest: {inrShort(debt.unpaid_interest)}</p>
+                          )}
+                          {status === 'paid' && lastPayDate && (
+                            <p className="text-[11px] text-mint-700 mt-0.5">Last paid: {fmtDate(lastPayDate)}</p>
+                          )}
+                          {status === 'near' && debt.urgency_message && (
+                            <p className="text-[11px] text-honey-700 mt-0.5">{debt.urgency_message}</p>
+                          )}
+                          {status === 'neutral' && lastPayDate && (
+                            <p className="text-[11px] text-ink-mute mt-0.5">Last paid: {fmtDate(lastPayDate)}</p>
+                          )}
+                        </div>
+                        <div className="text-right flex-shrink-0">
+                          <p className="text-xs font-medium">{inrShort(debt.outstanding_total)}</p>
+                          <p className="text-[10px] text-ink-mute">{debt.interest_rate}%/mo</p>
+                        </div>
+                      </div>
+                    </Link>
+                  );
+                })}
+              </div>
             </section>
           )}
 
