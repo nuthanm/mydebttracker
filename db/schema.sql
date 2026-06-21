@@ -48,12 +48,12 @@ CREATE TABLE IF NOT EXISTS debts (
 CREATE INDEX IF NOT EXISTS idx_debts_user ON debts(user_id);
 
 -- ---------- Debt Payments ----------
--- Every payment (interest, principal repayment, or full clearance) is logged here.
+-- Every debt transaction (interest payment, principal repayment, full clearance, or extra borrowing) is logged here.
 CREATE TABLE IF NOT EXISTS debt_payments (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   debt_id UUID NOT NULL REFERENCES debts(id) ON DELETE CASCADE,
   payment_date DATE NOT NULL,
-  payment_type TEXT NOT NULL,   -- 'interest' | 'principal' | 'clearance'
+  payment_type TEXT NOT NULL,   -- 'interest' | 'principal' | 'clearance' | 'topup'
   amount NUMERIC(14,2) NOT NULL,
   notes TEXT,
   created_at TIMESTAMPTZ DEFAULT now()

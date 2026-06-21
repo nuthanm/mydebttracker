@@ -33,7 +33,8 @@ export async function GET(req, { params }) {
       COALESCE(SUM(p.amount) FILTER (WHERE p.payment_type = 'interest'), 0) AS total_interest_paid,
       COALESCE(SUM(p.amount) FILTER (WHERE p.payment_type = 'principal'), 0) AS total_principal_paid,
       COALESCE(SUM(p.amount) FILTER (WHERE p.payment_type = 'clearance'), 0) AS total_clearance_paid,
-      COALESCE(SUM(p.amount), 0) AS total_paid
+      COALESCE(SUM(p.amount) FILTER (WHERE p.payment_type = 'topup'), 0) AS total_topup_amount,
+      COALESCE(SUM(p.amount) FILTER (WHERE p.payment_type IN ('interest', 'principal', 'clearance')), 0) AS total_paid
     FROM debts d
     LEFT JOIN debt_payments p ON p.debt_id = d.id
     WHERE d.id = ${params.id} AND d.user_id = ${user.id}
@@ -45,7 +46,7 @@ export async function GET(req, { params }) {
 
   const [payments, rateChanges] = await Promise.all([
     sql`
-      SELECT payment_date, payment_type, amount
+      SELECT payment_date, payment_type, amount, created_at
       FROM debt_payments
       WHERE debt_id = ${params.id}
       ORDER BY payment_date ASC, created_at ASC
@@ -138,14 +139,27 @@ export async function PATCH(req, { params }) {
         WHERE debt_id = ${params.id}
           AND payment_type IN ('principal', 'clearance')
       `;
-      const totalRepaid = Number(repaidRows[0].total_repaid);
-      if (principalNum < totalRepaid) {
-        return NextResponse.json(
-          { error: `principal cannot be less than already repaid amount (${totalRepaid.toFixed(2)}).` },
-          { status: 400 }
-        );
-      }
-      const currentPrincipalValue = Math.max(0, principalNum - totalRepaid);
+        const topupRows = await sql`
+          SELECT COALESCE(SUM(amount), 0) AS total_topup
+          FROM debt_payments
+          WHERE debt_id = ${params.id}
+            AND payment_type = 'topup'
+        `;
+        const totalRepaid = Number(repaidRows[0].total_repaid);
+        const totalTopup = Number(topupRows[0].total_topup);
+        if (principalNum < totalRepaid) {
+          return NextResponse.json(
+            { error: `principal cannot be less than already repaid amount (${totalRepaid.toFixed(2)}).` },
+            { status: 400 }
+          );
+        }
+        if (principalNum < totalTopup) {
+          return NextResponse.json(
+            { error: `principal cannot be less than extra borrowed amount already recorded (${totalTopup.toFixed(2)}).` },
+            { status: 400 }
+          );
+        }
+        const currentPrincipalValue = Math.max(0, principalNum - totalRepaid);
 
       rows = await sql`
         UPDATE debts SET
