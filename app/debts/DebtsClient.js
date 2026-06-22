@@ -6,7 +6,7 @@ import Shell from '@/components/Shell';
 import { toast } from '@/components/Toast';
 import { inr, inrShort, fmtDate, fmtMonthYear, statusColor, statusLabel } from '@/lib/format';
 import { getAccruedMonthsCount } from '@/lib/debtInterest';
-import { copyElementAsImage, elementToPngBlob, sanitizeImageName } from '@/lib/clipboardImage';
+import { buildSnapshotFilename, copyOrDownloadElementImage, TILE_SNAPSHOT_BG } from '@/lib/clipboardImage';
 
 function instrumentTagLabel(value) {
   if (value === 'temp') return 'Temp';
@@ -167,22 +167,15 @@ export default function DebtsClient({ user }) {
     }
 
     try {
-      await copyElementAsImage(element, { padding: 14, backgroundColor: '#f6f3e8' });
-      toast('Tile copied as image. Paste anywhere.');
-      return;
-    } catch (err) {
-      try {
-        const blob = await elementToPngBlob(element, { padding: 14, backgroundColor: '#f6f3e8' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `${sanitizeImageName(lenderName)}-tile.png`;
-        a.click();
-        URL.revokeObjectURL(url);
-        toast('Clipboard unavailable. Tile image downloaded.', 'info');
-      } catch (fallbackErr) {
-        toast('Could not copy tile image.', 'error');
-      }
+      const result = await copyOrDownloadElementImage(
+        element,
+        buildSnapshotFilename(lenderName, 'tile'),
+        { padding: 14, backgroundColor: TILE_SNAPSHOT_BG }
+      );
+      if (result === 'copied') toast('Tile copied as image. Paste anywhere.');
+      else toast('Clipboard unavailable. Tile image downloaded.', 'info');
+    } catch (finalErr) {
+      toast('Could not copy tile image.', 'error');
     }
   };
 
@@ -342,11 +335,11 @@ export default function DebtsClient({ user }) {
                       className="accent-ink"
                     />
                   </label>
-                  <div className="relative flex-1">
+                  <div className="flex-1">
                     <button
                       type="button"
                       onClick={() => handleCopyTile(d.id, d.lender_name)}
-                      className="absolute top-2 right-2 z-10 text-[10px] rounded-full border border-edge bg-paper-card/95 px-2 py-1 text-ink-soft hover:text-ink transition"
+                      className="mb-1 ml-auto block text-xs rounded-full border border-edge bg-paper-card/95 px-2 py-1 text-ink-soft hover:text-ink transition"
                       title="Copy section as image"
                     >
                       Copy section
