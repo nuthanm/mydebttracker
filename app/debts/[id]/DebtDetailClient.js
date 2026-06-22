@@ -778,7 +778,7 @@ via My Debt Tracker`;
             <div ref={shareRef} className="min-w-0 flex-1 space-y-3">
               <div className="flex items-center justify-between gap-3">
                 <h2 className="text-sm font-medium">Shareable summary</h2>
-                <span className="text-[11px] text-ink-mute">WhatsApp-ready image</span>
+                <span className="text-[11px] text-ink-mute">Shareable as image</span>
               </div>
               <div className="font-mono text-xs bg-paper-tint rounded-xl p-3 whitespace-pre-wrap text-ink-soft select-all">
 {shareSummaryText}
