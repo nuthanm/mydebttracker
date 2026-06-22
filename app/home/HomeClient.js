@@ -6,6 +6,7 @@ import Shell from '@/components/Shell';
 import { toast } from '@/components/Toast';
 import { exportDashboardWorkbook, exportOutflowWorkbook } from '@/lib/export';
 import { inr, inrShort, fmtDate } from '@/lib/format';
+import { copyElementAsImage, elementToPngBlob, sanitizeImageName } from '@/lib/clipboardImage';
 
 function alertTone(status) {
   return status === 'overdue'
@@ -187,6 +188,33 @@ export default function HomeClient({ user }) {
     }
   };
 
+  const handleCopySection = async (sectionId, lenderName) => {
+    const element = document.querySelector(`[data-copy-tile="${sectionId}"]`);
+    if (!element) {
+      toast('Could not find tile to copy.', 'error');
+      return;
+    }
+
+    try {
+      await copyElementAsImage(element, { padding: 14, backgroundColor: '#f6f3e8' });
+      toast('Tile copied as image. Paste anywhere.');
+      return;
+    } catch (err) {
+      try {
+        const blob = await elementToPngBlob(element, { padding: 14, backgroundColor: '#f6f3e8' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${sanitizeImageName(lenderName)}-schedule.png`;
+        a.click();
+        URL.revokeObjectURL(url);
+        toast('Clipboard unavailable. Tile image downloaded.', 'info');
+      } catch (fallbackErr) {
+        toast('Could not copy tile image.', 'error');
+      }
+    }
+  };
+
   return (
     <Shell user={user}>
       {loading && (
@@ -361,11 +389,20 @@ export default function HomeClient({ user }) {
                     ? toPaymentDateStr(debt.last_payment_date)
                     : null;
                   return (
-                    <Link
-                      key={debt.id}
-                      href={`/debts/${debt.id}`}
-                      className={`block rounded-xl border p-3 hover:opacity-90 transition-opacity ${tileClass}`}
-                    >
+                    <div key={debt.id} className="relative">
+                      <button
+                        type="button"
+                        onClick={() => handleCopySection(`payment-${debt.id}`, debt.lender_name)}
+                        className="absolute top-2 right-2 z-10 text-[10px] rounded-full border border-edge bg-paper-card/95 px-2 py-1 text-ink-soft hover:text-ink transition"
+                        title="Copy section as image"
+                      >
+                        Copy section
+                      </button>
+                      <Link
+                        href={`/debts/${debt.id}`}
+                        data-copy-tile={`payment-${debt.id}`}
+                        className={`block rounded-xl border p-3 hover:opacity-90 transition-opacity ${tileClass}`}
+                      >
                       <div className="flex items-start justify-between gap-2 mb-2">
                         <p className="text-sm font-medium truncate">{debt.lender_name}</p>
                         <span className={`flex items-center gap-1 text-[11px] font-medium rounded-full px-2 py-0.5 whitespace-nowrap flex-shrink-0 ${labelClass}`}>
@@ -405,7 +442,8 @@ export default function HomeClient({ user }) {
                           <p className="text-[10px] text-ink-mute">{debt.interest_rate}%/mo</p>
                         </div>
                       </div>
-                    </Link>
+                      </Link>
+                    </div>
                   );
                 })}
               </div>
