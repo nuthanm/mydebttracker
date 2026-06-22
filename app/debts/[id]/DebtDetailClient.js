@@ -257,7 +257,10 @@ export default function DebtDetailClient({ user, debtId }) {
       else toast('Share unavailable. Summary image downloaded.', 'info');
     } catch (err) {
       if (err?.name === 'AbortError') toast('Share cancelled.', 'info');
-      else toast('Could not share summary image.', 'error');
+      else {
+        console.error('Could not share summary image:', err);
+        toast('Could not share summary image.', 'error');
+      }
     }
   };
 
