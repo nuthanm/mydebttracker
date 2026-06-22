@@ -6,6 +6,7 @@ import Shell from '@/components/Shell';
 import { toast } from '@/components/Toast';
 import { inr, inrShort, fmtDate, fmtMonthYear, statusColor, statusLabel } from '@/lib/format';
 import { getAccruedMonthsCount } from '@/lib/debtInterest';
+import { buildSnapshotFilename, copyOrDownloadElementImage, TILE_SNAPSHOT_BG } from '@/lib/clipboardImage';
 
 function instrumentTagLabel(value) {
   if (value === 'temp') return 'Temp';
@@ -155,6 +156,26 @@ export default function DebtsClient({ user }) {
       toast('Could not apply bulk update.', 'error');
     } finally {
       setBulkSaving(false);
+    }
+  };
+
+  const handleCopyTile = async (debtId, lenderName) => {
+    const element = document.querySelector(`[data-copy-tile="debt-${debtId}"]`);
+    if (!element) {
+      toast('Could not find tile to copy.', 'error');
+      return;
+    }
+
+    try {
+      const result = await copyOrDownloadElementImage(
+        element,
+        buildSnapshotFilename(lenderName, 'tile'),
+        { padding: 14, backgroundColor: TILE_SNAPSHOT_BG }
+      );
+      if (result === 'copied') toast('Tile copied as image. Paste anywhere.');
+      else toast('Clipboard unavailable. Tile image downloaded.', 'info');
+    } catch (finalErr) {
+      toast('Could not copy tile image.', 'error');
     }
   };
 
@@ -314,10 +335,20 @@ export default function DebtsClient({ user }) {
                       className="accent-ink"
                     />
                   </label>
-                  <Link
-                    href={`/debts/${d.id}`}
-                    className={`block flex-1 bg-paper-card border border-edge rounded-2xl p-4 hover:border-ink-soft transition ${viewMode === 'tile' ? 'h-full' : ''}`}
-                  >
+                  <div className="flex-1">
+                    <button
+                      type="button"
+                      onClick={() => handleCopyTile(d.id, d.lender_name)}
+                      className="mb-1 ml-auto block text-xs rounded-full border border-edge bg-paper-card/95 px-2 py-1 text-ink-soft hover:text-ink transition"
+                      title="Copy section as image"
+                    >
+                      Copy section
+                    </button>
+                    <Link
+                      href={`/debts/${d.id}`}
+                      data-copy-tile={`debt-${d.id}`}
+                      className={`block bg-paper-card border border-edge rounded-2xl p-4 hover:border-ink-soft transition ${viewMode === 'tile' ? 'h-full' : ''}`}
+                    >
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2 mb-1 flex-wrap">
@@ -370,7 +401,8 @@ export default function DebtsClient({ user }) {
                       </span>
                       <span className="ml-auto">Total owed: <span className="text-ink font-medium">{inr(totalOwed)}</span></span>
                     </div>
-                  </Link>
+                    </Link>
+                  </div>
                 </div>
               );
             })}
