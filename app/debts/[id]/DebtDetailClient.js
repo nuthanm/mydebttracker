@@ -6,6 +6,7 @@ import Shell from '@/components/Shell';
 import { toast } from '@/components/Toast';
 import { appConfirm } from '@/components/ConfirmDialog';
 import { exportDebtWorkbook } from '@/lib/export';
+import { buildSnapshotFilename, copyOrDownloadElementImage, shareOrDownloadElementImage, TILE_SNAPSHOT_BG } from '@/lib/clipboardImage';
 import { inr, inrShort, inrRaw, fmtDate, fmtMonthYear, statusColor, statusLabel } from '@/lib/format';
 import { getAccruedMonthsCount, sumInterestForMonthRange } from '@/lib/debtInterest';
 
@@ -217,123 +218,46 @@ export default function DebtDetailClient({ user, debtId }) {
     }
   };
 
-  // Share as image using Canvas API
-  const handleShare = async () => {
-    if (!debt) { toast('No debt data to share.', 'error'); return; }
-    const canvas = document.createElement('canvas');
-    const W = 640, H = 480;
-    canvas.width = W * 2;
-    canvas.height = H * 2;
-    canvas.style.width = W + 'px';
-    canvas.style.height = H + 'px';
-    const ctx = canvas.getContext('2d');
-    ctx.scale(2, 2);
-
-    // Background
-    ctx.fillStyle = '#FAF8F2';
-    ctx.fillRect(0, 0, W, H);
-
-    // Header bar
-    ctx.fillStyle = '#0E1714';
-    ctx.fillRect(0, 0, W, 56);
-
-    // Title
-    ctx.fillStyle = '#FAF8F2';
-    ctx.font = 'bold 18px system-ui';
-    ctx.fillText('My Debt Tracker', 20, 34);
-
-    ctx.fillStyle = '#FAF8F2';
-    ctx.font = '13px system-ui';
-    ctx.fillText(user.name, W - 20 - ctx.measureText(user.name).width, 34);
-
-    // Debt name
-    ctx.fillStyle = '#0E1714';
-    ctx.font = 'bold 22px system-ui';
-    ctx.fillText(debt.lender_name, 20, 90);
-
-    // Status
-    const statusText = statusLabel(debt.status);
-    ctx.font = '12px system-ui';
-    ctx.fillStyle = debt.status === 'cleared' ? '#0F6E56' : '#854F0B';
-    ctx.fillText(statusText, 20, 112);
-
-    // Stats
-    const monthly = Number(debt.current_monthly_interest || 0);
-    const unpaid = Number(debt.unpaid_interest || 0);
-    const totalOwed = Number(debt.current_principal) + unpaid;
-
-    const stats = [
-      { label: 'Total Borrowed', value: inr(debt.principal) },
-      { label: 'Current Principal', value: inr(debt.current_principal) },
-      { label: 'Monthly Interest', value: inr(monthly) + ' @ ' + debt.interest_rate + '% /mo' },
-      { label: 'Total Paid', value: inr(debt.total_paid || 0) },
-      { label: 'Unpaid Interest', value: inr(unpaid) },
-      { label: 'Total Owed', value: inr(totalOwed) },
-    ];
-
-    ctx.font = '13px system-ui';
-    stats.forEach((s, i) => {
-      const x = i % 2 === 0 ? 20 : W / 2 + 10;
-      const y = 145 + Math.floor(i / 2) * 52;
-      ctx.fillStyle = '#7A867F';
-      ctx.fillText(s.label, x, y);
-      ctx.fillStyle = '#0E1714';
-      ctx.font = 'bold 15px system-ui';
-      ctx.fillText(s.value, x, y + 20);
-      ctx.font = '13px system-ui';
-    });
-
-    // Bar chart (principal vs paid)
-    const chartY = 335;
-    const chartH = 80;
-    const barW = 200;
-    const maxVal = Math.max(Number(debt.principal), 1);
-
-    const bars = [
-      { label: 'Principal', val: Number(debt.current_principal), color: '#A32D2D' },
-      { label: 'Total Paid', val: Number(debt.total_paid || 0), color: '#0F6E56' },
-    ];
-
-    ctx.font = '12px system-ui';
-    bars.forEach((b, i) => {
-      const x = 20 + i * (barW + 30);
-      const fillH = Math.max(4, (b.val / maxVal) * chartH);
-      const y = chartY + chartH - fillH;
-      ctx.fillStyle = b.color;
-      ctx.fillRect(x, y, barW, fillH);
-      ctx.fillStyle = '#3A4742';
-      ctx.font = '11px system-ui';
-      ctx.fillText(b.label, x, chartY + chartH + 16);
-      ctx.fillStyle = '#0E1714';
-      ctx.font = 'bold 12px system-ui';
-      ctx.fillText(inrShort(b.val), x, y - 6);
-    });
-
-    // Footer
-    ctx.fillStyle = '#A8B0AB';
-    ctx.font = '11px system-ui';
-    const dateStr = 'Generated on ' + new Date().toLocaleDateString('en-IN');
-    ctx.fillText(dateStr, W - 20 - ctx.measureText(dateStr).width, H - 12);
+  const handleCopyShareImage = async () => {
+    if (!debt || !shareRef.current) {
+      toast('No summary section to copy.', 'error');
+      return;
+    }
 
     try {
-      canvas.toBlob(async (blob) => {
-        if (!blob) { toast('Could not generate image.', 'error'); return; }
-        const file = new File([blob], 'debt-summary.png', { type: 'image/png' });
-        if (navigator.share && navigator.canShare({ files: [file] })) {
-          await navigator.share({ files: [file], title: `Debt: ${debt.lender_name}` });
-        } else {
-          // Fallback: download
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = `debt-${debt.lender_name.replace(/\s+/g, '-')}.png`;
-          a.click();
-          URL.revokeObjectURL(url);
-          toast('Image downloaded!');
-        }
-      }, 'image/png');
+      const result = await copyOrDownloadElementImage(
+        shareRef.current,
+        buildSnapshotFilename(debt.lender_name, 'summary'),
+        { padding: 16, backgroundColor: TILE_SNAPSHOT_BG }
+      );
+      if (result === 'copied') toast('Summary section copied as image. Paste anywhere.');
+      else toast('Clipboard unavailable. Summary image downloaded.', 'info');
     } catch (err) {
-      toast('Share cancelled.', 'info');
+      toast('Could not copy summary image.', 'error');
+    }
+  };
+
+  const handleShare = async () => {
+    if (!debt || !shareRef.current) {
+      toast('No summary section to share.', 'error');
+      return;
+    }
+
+    try {
+      const result = await shareOrDownloadElementImage(
+        shareRef.current,
+        buildSnapshotFilename(debt.lender_name, 'summary'),
+        {
+          padding: 16,
+          backgroundColor: TILE_SNAPSHOT_BG,
+          shareTitle: `Debt: ${debt.lender_name}`,
+        }
+      );
+      if (result === 'shared') toast('Summary image ready to share.');
+      else toast('Share unavailable. Summary image downloaded.', 'info');
+    } catch (err) {
+      if (err?.name === 'AbortError') toast('Share cancelled.', 'info');
+      else toast('Could not share summary image.', 'error');
     }
   };
 
@@ -391,15 +315,6 @@ export default function DebtDetailClient({ user, debtId }) {
 ━━━━━━━━━━━━━━━━━━━━━━━
 via My Debt Tracker`;
 
-  const handleCopyShareText = async () => {
-    try {
-      await navigator.clipboard.writeText(shareSummaryText);
-      toast('Summary copied for WhatsApp sharing.');
-    } catch (err) {
-      toast('Could not copy summary.', 'error');
-    }
-  };
-
   // Bar chart data for monthly breakdown (last 6 months)
   const barMaxVal = Math.max(Number(debt.principal), Number(debt.total_paid || 0), 1);
 
@@ -454,9 +369,9 @@ via My Debt Tracker`;
                 <path d="M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/>
               </svg>
             </button>
-            <button onClick={handleCopyShareText}
+            <button onClick={handleCopyShareImage}
               className="w-9 h-9 rounded-xl border border-edge flex items-center justify-center text-ink-soft hover:bg-paper-tint transition"
-              title="Copy share summary">
+              title="Copy summary as image">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                 <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
                 <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
@@ -858,29 +773,34 @@ via My Debt Tracker`;
         </section>
 
         {/* Summary share card (text) */}
-        <section className="bg-paper-card border border-edge rounded-2xl p-4 md:p-5" ref={shareRef}>
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-medium">Shareable summary</h2>
-            <div className="flex items-center gap-2">
-              <button onClick={handleCopyShareText}
-                className="btn-ghost text-xs py-1.5 px-3 rounded-lg flex items-center gap-1.5">
+        <section className="bg-paper-card border border-edge rounded-2xl p-4 md:p-5">
+          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+            <div ref={shareRef} className="min-w-0 flex-1 space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <h2 className="text-sm font-medium">Shareable summary</h2>
+                <span className="text-[11px] text-ink-mute">WhatsApp-ready image</span>
+              </div>
+              <div className="font-mono text-xs bg-paper-tint rounded-xl p-3 whitespace-pre-wrap text-ink-soft select-all">
+{shareSummaryText}
+              </div>
+            </div>
+            <div className="flex flex-col gap-2 md:w-[220px]">
+              <button onClick={handleCopyShareImage}
+                className="snapshot-action w-full rounded-xl px-3 py-2 text-xs font-medium">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                   <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
                   <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
                 </svg>
-                Copy text
+                Copy this section
               </button>
               <button onClick={handleShare}
-                className="btn-ghost text-xs py-1.5 px-3 rounded-lg flex items-center gap-1.5">
+                className="snapshot-action w-full rounded-xl px-3 py-2 text-xs font-medium">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/>
                 </svg>
                 Share image
               </button>
             </div>
-          </div>
-          <div className="font-mono text-xs bg-paper-tint rounded-xl p-3 whitespace-pre-wrap text-ink-soft select-all">
-{shareSummaryText}
           </div>
         </section>
 

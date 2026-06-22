@@ -172,10 +172,10 @@ export default function DebtsClient({ user }) {
         buildSnapshotFilename(lenderName, 'tile'),
         { padding: 14, backgroundColor: TILE_SNAPSHOT_BG }
       );
-      if (result === 'copied') toast('Tile copied as image. Paste anywhere.');
-      else toast('Clipboard unavailable. Tile image downloaded.', 'info');
+      if (result === 'copied') toast('Section copied as image. Paste anywhere.');
+      else toast('Clipboard unavailable. Section image downloaded.', 'info');
     } catch (finalErr) {
-      toast('Could not copy tile image.', 'error');
+      toast('Could not copy section image.', 'error');
     }
   };
 
@@ -339,10 +339,14 @@ export default function DebtsClient({ user }) {
                     <button
                       type="button"
                       onClick={() => handleCopyTile(d.id, d.lender_name)}
-                      className="mb-1 ml-auto block text-xs rounded-full border border-edge bg-paper-card/95 px-2 py-1 text-ink-soft hover:text-ink transition"
-                      title="Copy section as image"
+                      className="snapshot-action mb-2 flex w-full rounded-xl px-3 py-2 text-xs font-medium"
+                      title="Copy this section as image"
                     >
-                      Copy section
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                      </svg>
+                      Copy this section
                     </button>
                     <Link
                       href={`/debts/${d.id}`}

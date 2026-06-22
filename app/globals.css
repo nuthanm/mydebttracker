@@ -27,6 +27,18 @@ input:focus, select:focus, textarea:focus {
 .btn-ghost { background: transparent; border: 1px solid #E2DDCB; transition: all 0.15s; }
 .btn-ghost:hover { background: #F1ECDF; }
 
+.snapshot-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid #E2DDCB;
+  background: rgba(255, 255, 255, 0.92);
+  color: #3A4742;
+  transition: all 0.15s;
+}
+.snapshot-action:hover { background: #F1ECDF; color: #0E1714; }
+
 .btn-danger { background: #A32D2D; color: #FAF8F2; transition: all 0.15s; }
 .btn-danger:hover:not(:disabled) { background: #7a2020; }
 .btn-danger:disabled { opacity: 0.5; cursor: not-allowed; }
