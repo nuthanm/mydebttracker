@@ -40,7 +40,7 @@ function comparePaymentSchedule(left, right) {
   const rightTargetDate = toPaymentDateStr(right.target_date);
 
   if (leftTargetDate && rightTargetDate && leftTargetDate !== rightTargetDate) {
-    return leftTargetDate.localeCompare(rightTargetDate);
+    return leftTargetDate < rightTargetDate ? -1 : 1;
   }
   if (leftTargetDate && !rightTargetDate) return -1;
   if (!leftTargetDate && rightTargetDate) return 1;
@@ -48,7 +48,8 @@ function comparePaymentSchedule(left, right) {
   const interestDiff = Number(right.interest_rate || 0) - Number(left.interest_rate || 0);
   if (interestDiff !== 0) return interestDiff;
 
-  const statusDiff = (PAYMENT_SCHEDULE_RANK[left._scheduleStatus] ?? 9) - (PAYMENT_SCHEDULE_RANK[right._scheduleStatus] ?? 9);
+  const statusDiff = (PAYMENT_SCHEDULE_RANK[left._scheduleStatus] ?? DEFAULT_SCHEDULE_RANK)
+    - (PAYMENT_SCHEDULE_RANK[right._scheduleStatus] ?? DEFAULT_SCHEDULE_RANK);
   if (statusDiff !== 0) return statusDiff;
 
   return String(left.lender_name || '').localeCompare(String(right.lender_name || ''));
@@ -68,6 +69,7 @@ function getPaymentScheduleStatus(debt) {
 }
 
 const PAYMENT_SCHEDULE_RANK = { overdue: 0, near: 1, neutral: 2, paid: 3 };
+const DEFAULT_SCHEDULE_RANK = 9;
 
 function pieGradient(items, key) {
   const total = items.reduce((sum, item) => sum + Number(item[key] || 0), 0);
