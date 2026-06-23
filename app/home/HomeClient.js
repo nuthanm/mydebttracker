@@ -45,14 +45,17 @@ function comparePaymentSchedule(left, right) {
   if (leftTargetDate && !rightTargetDate) return -1;
   if (!leftTargetDate && rightTargetDate) return 1;
 
-  const interestDiff = Number(right.interest_rate || 0) - Number(left.interest_rate || 0);
-  if (interestDiff !== 0) return interestDiff;
+  const leftInterestRate = Number(left.interest_rate || 0);
+  const rightInterestRate = Number(right.interest_rate || 0);
+  if (leftInterestRate !== rightInterestRate) {
+    return leftInterestRate > rightInterestRate ? -1 : 1;
+  }
 
   const statusDiff = (PAYMENT_SCHEDULE_RANK[left._scheduleStatus] ?? DEFAULT_SCHEDULE_RANK)
     - (PAYMENT_SCHEDULE_RANK[right._scheduleStatus] ?? DEFAULT_SCHEDULE_RANK);
   if (statusDiff !== 0) return statusDiff;
 
-  return String(left.lender_name || '').localeCompare(String(right.lender_name || ''));
+  return String(left.lender_name || '').localeCompare(String(right.lender_name || ''), undefined, { sensitivity: 'base' });
 }
 
 function getPaymentScheduleStatus(debt) {
