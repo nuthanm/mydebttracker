@@ -35,6 +35,29 @@ function toPaymentDateStr(value) {
   return value ? String(value).slice(0, 10) : null;
 }
 
+function comparePaymentSchedule(left, right) {
+  const leftTargetDate = toPaymentDateStr(left.target_date);
+  const rightTargetDate = toPaymentDateStr(right.target_date);
+
+  if (leftTargetDate && rightTargetDate && leftTargetDate !== rightTargetDate) {
+    return leftTargetDate < rightTargetDate ? -1 : 1;
+  }
+  if (leftTargetDate && !rightTargetDate) return -1;
+  if (!leftTargetDate && rightTargetDate) return 1;
+
+  const leftInterestRate = Number(left.interest_rate || 0);
+  const rightInterestRate = Number(right.interest_rate || 0);
+  if (leftInterestRate !== rightInterestRate) {
+    return leftInterestRate > rightInterestRate ? -1 : 1;
+  }
+
+  const statusDiff = (PAYMENT_SCHEDULE_RANK[left._scheduleStatus] ?? DEFAULT_SCHEDULE_RANK)
+    - (PAYMENT_SCHEDULE_RANK[right._scheduleStatus] ?? DEFAULT_SCHEDULE_RANK);
+  if (statusDiff !== 0) return statusDiff;
+
+  return String(left.lender_name || '').localeCompare(String(right.lender_name || ''), undefined, { sensitivity: 'base' });
+}
+
 function getPaymentScheduleStatus(debt) {
   const now = new Date();
   const currentYM = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
@@ -49,6 +72,7 @@ function getPaymentScheduleStatus(debt) {
 }
 
 const PAYMENT_SCHEDULE_RANK = { overdue: 0, near: 1, neutral: 2, paid: 3 };
+const DEFAULT_SCHEDULE_RANK = 9;
 
 function pieGradient(items, key) {
   const total = items.reduce((sum, item) => sum + Number(item[key] || 0), 0);
@@ -112,7 +136,7 @@ export default function HomeClient({ user }) {
   const paymentSchedule = useMemo(() => {
     return activeDebts
       .map((debt) => ({ ...debt, _scheduleStatus: getPaymentScheduleStatus(debt) }))
-      .sort((a, b) => (PAYMENT_SCHEDULE_RANK[a._scheduleStatus] ?? 9) - (PAYMENT_SCHEDULE_RANK[b._scheduleStatus] ?? 9));
+      .sort(comparePaymentSchedule);
   }, [activeDebts]);
   const empty = !loading && debts.length === 0;
   const alerts = dashboard?.alerts || [];
