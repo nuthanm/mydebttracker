@@ -35,6 +35,25 @@ function toPaymentDateStr(value) {
   return value ? String(value).slice(0, 10) : null;
 }
 
+function comparePaymentSchedule(left, right) {
+  const leftTargetDate = toPaymentDateStr(left.target_date);
+  const rightTargetDate = toPaymentDateStr(right.target_date);
+
+  if (leftTargetDate && rightTargetDate && leftTargetDate !== rightTargetDate) {
+    return leftTargetDate.localeCompare(rightTargetDate);
+  }
+  if (leftTargetDate && !rightTargetDate) return -1;
+  if (!leftTargetDate && rightTargetDate) return 1;
+
+  const interestDiff = Number(right.interest_rate || 0) - Number(left.interest_rate || 0);
+  if (interestDiff !== 0) return interestDiff;
+
+  const statusDiff = (PAYMENT_SCHEDULE_RANK[left._scheduleStatus] ?? 9) - (PAYMENT_SCHEDULE_RANK[right._scheduleStatus] ?? 9);
+  if (statusDiff !== 0) return statusDiff;
+
+  return String(left.lender_name || '').localeCompare(String(right.lender_name || ''));
+}
+
 function getPaymentScheduleStatus(debt) {
   const now = new Date();
   const currentYM = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
@@ -112,7 +131,7 @@ export default function HomeClient({ user }) {
   const paymentSchedule = useMemo(() => {
     return activeDebts
       .map((debt) => ({ ...debt, _scheduleStatus: getPaymentScheduleStatus(debt) }))
-      .sort((a, b) => (PAYMENT_SCHEDULE_RANK[a._scheduleStatus] ?? 9) - (PAYMENT_SCHEDULE_RANK[b._scheduleStatus] ?? 9));
+      .sort(comparePaymentSchedule);
   }, [activeDebts]);
   const empty = !loading && debts.length === 0;
   const alerts = dashboard?.alerts || [];
