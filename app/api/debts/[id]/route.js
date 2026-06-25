@@ -7,7 +7,6 @@ import {
   ensureDebtRateChangesTable,
   ensureInitialRateChange,
   getCurrentMonth,
-  getFirstInterestMonth,
   normalizeEffectiveMonth,
 } from '@/lib/debtInterest';
 import {
@@ -119,11 +118,11 @@ export async function PATCH(req, { params }) {
         return NextResponse.json({ error: 'Provide a valid effective month for the new interest rate.' }, { status: 400 });
       }
 
-      const firstInterestMonth = normalizeEffectiveMonth(getFirstInterestMonth(debt.start_date));
+      const startMonth = normalizeEffectiveMonth(debt.start_date);
       const currentMonth = normalizeEffectiveMonth(getCurrentMonth());
-      if (firstInterestMonth && compareEffectiveMonths(effectiveMonth, firstInterestMonth) < 0) {
+      if (startMonth && compareEffectiveMonths(effectiveMonth, startMonth) < 0) {
         return NextResponse.json(
-          { error: `Effective month cannot be earlier than ${(firstInterestMonth || '').slice(0, 7) || 'the first interest month'}.` },
+          { error: `Effective month cannot be earlier than ${(startMonth || '').slice(0, 7) || 'the loan start month'}.` },
           { status: 400 }
         );
       }

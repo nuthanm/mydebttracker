@@ -461,6 +461,7 @@ via My Debt Tracker`;
                 <input
                   type="month"
                   value={eForm.rate_effective_month}
+                  min={debt?.start_date?.slice(0, 7)}
                   max={currentMonth}
                   onChange={e => setE('rate_effective_month', e.target.value)}
                   className="field-input"
