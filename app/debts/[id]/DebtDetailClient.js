@@ -80,6 +80,9 @@ export default function DebtDetailClient({ user, debtId }) {
   const [eSaving, setESaving] = useState(false);
   const [eError, setEError] = useState('');
 
+  // EMI amortization toggle
+  const [showEmiSchedule, setShowEmiSchedule] = useState(false);
+
   const loadData = useCallback(async () => {
     const [dr, pr] = await Promise.all([
       fetch(`/api/debts/${debtId}`).then(r => r.json()),
@@ -307,7 +310,6 @@ export default function DebtDetailClient({ user, debtId }) {
   const emiSchedule = emiAmount != null
     ? calculateEmiSchedule({ principal: currentPrincipal, interestRate: Number(debt.interest_rate), emiAmount, maxMonths: 120 })
     : [];
-  const [showEmiSchedule, setShowEmiSchedule] = useState(false);
   const detailTooltip = [
     `Monthly interest: ${inr(monthly)}`,
     `Interest paid: ${inr(interestPaid)}`,
