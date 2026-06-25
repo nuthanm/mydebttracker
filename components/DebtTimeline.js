@@ -12,6 +12,7 @@ const BASELINE_Y = 110;    // y of the horizontal axis rule
 const DOT_R = 7;           // dot radius
 const STACK_GAP = 20;      // vertical gap between stacked dots on same date
 const TICK_H = 7;          // axis tick height
+const TODAY_LABEL_CLEARANCE = 16; // min SVG units between a tick label and the "Today" marker
 
 /* ─── Colour tokens (matches tailwind config) ────────────────────────────── */
 const COLOR_ADDED   = '#A32D2D'; // danger
@@ -82,7 +83,7 @@ export default function DebtTimeline({ events }) {
   for (const [date, group] of byDate) {
     const cx = svgX(date, minMs, rangeMs);
     group.forEach((event, i) => {
-      dots.push({ event, cx, cy: BASELINE_Y - DOT_R - (i + 1) * STACK_GAP + STACK_GAP });
+      dots.push({ event, cx, cy: BASELINE_Y - DOT_R - i * STACK_GAP });
     });
   }
 
@@ -128,7 +129,7 @@ export default function DebtTimeline({ events }) {
           {/* ── Axis ticks + labels ── */}
           {ticks.map((tick, i) => {
             const tx = svgX(new Date(tick.ms).toISOString().slice(0, 10), minMs, rangeMs);
-            if (tx > SVG_W - PAD_X - 16) return null; // skip if too close to "Today"
+            if (tx > SVG_W - PAD_X - TODAY_LABEL_CLEARANCE) return null; // skip if too close to "Today"
             return (
               <g key={i}>
                 <line x1={tx} y1={BASELINE_Y} x2={tx} y2={BASELINE_Y + TICK_H} stroke={COLOR_AXIS} strokeWidth="1" />
@@ -188,8 +189,8 @@ export default function DebtTimeline({ events }) {
                 <title>
                   {event.lender_name}
                   {event.type === 'added'
-                    ? ` · Debt added · ${event.date} · ${Math.round(event.principal || 0)}`
-                    : ` · Cleared · ${event.date} · ${Math.round(event.amount || 0)}`}
+                    ? ` · Debt added · ${event.date} · ${inr(event.principal || 0)}`
+                    : ` · Cleared · ${event.date} · ${inr(event.amount || 0)}`}
                 </title>
               </g>
             );
