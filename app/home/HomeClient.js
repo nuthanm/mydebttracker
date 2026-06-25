@@ -63,30 +63,37 @@ function getPaymentScheduleStatus(debt) {
   const now = new Date();
   const currentYM = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   const lastPaymentDate = toPaymentDateStr(debt.last_payment_date);
+  const lastTopupDate = toPaymentDateStr(debt.last_topup_date);
   const paidThisMonth = lastPaymentDate ? lastPaymentDate.slice(0, 7) === currentYM : false;
+  const toppedUpThisMonth = lastTopupDate ? lastTopupDate.slice(0, 7) === currentYM : false;
 
   if (debt.urgency_status === 'overdue') return 'overdue';
   if (paidThisMonth) return 'paid';
   if (debt.urgency_status === 'upcoming') return 'near';
   if (!paidThisMonth && Number(debt.unpaid_interest || 0) > 0) return 'overdue';
+  if (toppedUpThisMonth) return 'topup';
   return 'neutral';
 }
 
-const PAYMENT_SCHEDULE_RANK = { overdue: 0, near: 1, neutral: 2, paid: 3 };
+const PAYMENT_SCHEDULE_RANK = { overdue: 0, near: 1, topup: 2, neutral: 3, paid: 4 };
 const DEFAULT_SCHEDULE_RANK = 9;
 
-function pieGradient(items, key) {
+function pieData(items, key) {
   const total = items.reduce((sum, item) => sum + Number(item[key] || 0), 0);
-  if (!total) return 'conic-gradient(#E2DDCB 0 100%)';
-  const colors = ['#A32D2D', '#2563eb', '#0F6E56', '#d97706', '#7c3aed', '#0891b2'];
+  const CHART_COLORS = ['#A32D2D', '#2563eb', '#0F6E56', '#d97706', '#7c3aed', '#0891b2'];
+  if (!total) return { gradient: 'conic-gradient(#E2DDCB 0 100%)', colors: [], total: 0 };
   let cursor = 0;
-  const segments = items.slice(0, 6).map((item, index) => {
+  const slices = items.slice(0, 6).map((item, index) => {
     const weight = (Number(item[key] || 0) / total) * 100;
     const from = cursor;
     cursor += weight;
-    return `${colors[index % colors.length]} ${from}% ${cursor}%`;
+    return { color: CHART_COLORS[index % CHART_COLORS.length], from, to: cursor };
   });
-  return `conic-gradient(${segments.join(', ')})`;
+  return {
+    gradient: `conic-gradient(${slices.map((s) => `${s.color} ${s.from}% ${s.to}%`).join(', ')})`,
+    colors: slices.map((s) => s.color),
+    total,
+  };
 }
 
 export default function HomeClient({ user }) {
@@ -232,6 +239,26 @@ export default function HomeClient({ user }) {
       else toast('Clipboard unavailable. Section image downloaded.', 'info');
     } catch (finalErr) {
       toast('Could not copy section image.', 'error');
+    }
+  };
+
+  const handleCopyInsights = async () => {
+    const element = document.querySelector('[data-copy-tile="insights"]');
+    if (!element) {
+      toast('Could not find section to copy.', 'error');
+      return;
+    }
+
+    try {
+      const result = await copyOrDownloadElementImage(
+        element,
+        buildSnapshotFilename('insights', 'section'),
+        { padding: 14, backgroundColor: TILE_SNAPSHOT_BG }
+      );
+      if (result === 'copied') toast('Insights copied as image. Paste anywhere.');
+      else toast('Clipboard unavailable. Insights image downloaded.', 'info');
+    } catch (finalErr) {
+      toast('Could not copy insights image.', 'error');
     }
   };
 
@@ -401,18 +428,22 @@ export default function HomeClient({ user }) {
                     status === 'overdue'
                       ? 'border-danger/40 bg-danger/5'
                       : status === 'near'
-                        ? 'border-honey-500/40 bg-honey-50'
+                        ? 'border-honey-600/30 bg-honey-50'
                         : status === 'paid'
                           ? 'border-mint-600/30 bg-mint-50'
-                          : 'border-edge bg-paper-tint';
+                          : status === 'topup'
+                            ? 'border-ember-600/30 bg-ember-50'
+                            : 'border-edge bg-paper-tint';
                   const labelClass =
                     status === 'overdue'
                       ? 'text-danger bg-danger/10'
                       : status === 'near'
-                        ? 'text-honey-700 bg-honey-100'
+                        ? 'text-honey-600 bg-honey-50'
                         : status === 'paid'
-                          ? 'text-mint-700 bg-mint-100'
-                          : 'text-ink-mute bg-paper-card';
+                          ? 'text-mint-600 bg-mint-50'
+                          : status === 'topup'
+                            ? 'text-ember-600 bg-ember-50'
+                            : 'text-ink-mute bg-paper-card';
                   const statusLabel =
                     status === 'overdue'
                       ? 'Overdue'
@@ -420,7 +451,9 @@ export default function HomeClient({ user }) {
                         ? 'Due soon'
                         : status === 'paid'
                           ? 'Paid'
-                          : 'Scheduled';
+                          : status === 'topup'
+                            ? 'Borrowed'
+                            : 'Scheduled';
                   const lastPayDate = debt.last_payment_date
                     ? toPaymentDateStr(debt.last_payment_date)
                     : null;
@@ -445,6 +478,12 @@ export default function HomeClient({ user }) {
                             <polyline points="20 6 9 17 4 12" />
                           </svg>
                         )}
+                        {status === 'topup' && (
+                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                            <line x1="12" y1="5" x2="12" y2="19" />
+                            <polyline points="19 12 12 5 5 12" />
+                          </svg>
+                        )}
                         {statusLabel}
                       </span>
                     </div>
@@ -455,10 +494,13 @@ export default function HomeClient({ user }) {
                           <p className="text-xs text-danger mt-0.5">Unpaid interest: {inrShort(debt.unpaid_interest)}</p>
                         )}
                         {status === 'paid' && lastPayDate && (
-                          <p className="text-[11px] text-mint-700 mt-0.5">Last paid: {fmtDate(lastPayDate)}</p>
+                          <p className="text-[11px] text-mint-600 mt-0.5">Last paid: {fmtDate(lastPayDate)}</p>
                         )}
                         {status === 'near' && debt.urgency_message && (
-                          <p className="text-[11px] text-honey-700 mt-0.5">{debt.urgency_message}</p>
+                          <p className="text-[11px] text-honey-600 mt-0.5">{debt.urgency_message}</p>
+                        )}
+                        {status === 'topup' && (
+                          <p className="text-[11px] text-ember-600 mt-0.5">Topped up this month — no payment yet</p>
                         )}
                         {status === 'neutral' && lastPayDate && (
                           <p className="text-[11px] text-ink-mute mt-0.5">Last paid: {fmtDate(lastPayDate)}</p>
@@ -501,31 +543,68 @@ export default function HomeClient({ user }) {
 
           <div className="flex items-center justify-between flex-wrap gap-2">
             <h2 className="text-sm font-medium">Insights</h2>
-            <div className="flex gap-2">
-              {['current', 'bar', 'pie'].map((mode) => (
-                <button key={mode} onClick={() => setInsightView(mode)} className={`chip text-xs ${insightView === mode ? 'on' : ''}`}>
-                  {mode === 'current' ? 'Current' : mode === 'bar' ? 'Bar' : 'Pie'}
-                </button>
-              ))}
+            <div className="flex items-center gap-2">
+              <div className="flex gap-1.5">
+                {['current', 'bar', 'pie'].map((mode) => (
+                  <button key={mode} onClick={() => setInsightView(mode)} className={`chip text-xs ${insightView === mode ? 'on' : ''}`}>
+                    {mode === 'current' ? 'Current' : mode === 'bar' ? 'Bar' : 'Pie'}
+                  </button>
+                ))}
+              </div>
+              <button
+                type="button"
+                onClick={handleCopyInsights}
+                className="snapshot-action flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-medium"
+                title="Copy insights as image"
+              >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                </svg>
+                Copy
+              </button>
             </div>
           </div>
 
-          <div className="grid xl:grid-cols-2 gap-4 md:gap-5">
+          <div data-copy-tile="insights" className="grid xl:grid-cols-2 gap-4 md:gap-5">
             <section className="bg-paper-card border border-edge rounded-2xl p-4 md:p-5">
               <div className="flex justify-between items-baseline mb-4">
                 <h2 className="text-sm font-medium">High to low debt details</h2>
                 <span className="text-[11px] text-ink-mute">Outstanding total</span>
               </div>
-              {insightView === 'pie' ? (
-                <div className="flex flex-col items-center gap-3">
-                  <div className="w-36 h-36 rounded-full" style={{ background: pieGradient(byOutstanding, 'outstanding_total') }} />
-                  <div className="w-full space-y-1">
-                    {byOutstanding.slice(0, 6).map((debt) => (
-                      <p key={debt.id} className="text-xs flex justify-between"><span className="truncate pr-3">{debt.lender_name}</span><span>{inrShort(debt.outstanding_total)}</span></p>
-                    ))}
+              {insightView === 'pie' ? (() => {
+                const pd = pieData(byOutstanding, 'outstanding_total');
+                return (
+                  <div className="flex flex-col items-center gap-4">
+                    <div className="relative w-36 h-36 flex-shrink-0">
+                      <div className="w-36 h-36 rounded-full" style={{ background: pd.gradient }} />
+                      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                        <div className="w-16 h-16 rounded-full bg-paper-card flex flex-col items-center justify-center shadow-sm">
+                          <span className="text-[9px] text-ink-mute leading-tight">Total</span>
+                          <span className="text-[11px] font-medium leading-tight">{inrShort(pd.total)}</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="w-full space-y-1.5">
+                      {byOutstanding.slice(0, 6).map((debt, index) => {
+                        const sharePct = pd.total > 0 ? Math.round((Number(debt.outstanding_total) / pd.total) * 100) : 0;
+                        return (
+                          <div key={debt.id} className="flex items-center justify-between text-xs gap-2">
+                            <div className="flex items-center gap-1.5 min-w-0">
+                              <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: pd.colors[index] }} />
+                              <span className="truncate">{debt.lender_name}</span>
+                            </div>
+                            <div className="flex items-center gap-1.5 flex-shrink-0 text-right">
+                              <span className="font-medium">{inrShort(debt.outstanding_total)}</span>
+                              <span className="text-[10px] text-ink-mute w-7 text-right">{sharePct}%</span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
-                </div>
-              ) : insightView === 'bar' ? (
+                );
+              })() : insightView === 'bar' ? (
                 <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 items-end min-h-[190px]">
                   {byOutstanding.slice(0, 6).map((debt) => {
                     const height = pct(debt.outstanding_total, maxOutstanding);
@@ -569,16 +648,39 @@ export default function HomeClient({ user }) {
                 <h2 className="text-sm font-medium">Interest burden per month</h2>
                 <span className="text-[11px] text-ink-mute">Aligned view</span>
               </div>
-              {insightView === 'pie' ? (
-                <div className="flex flex-col items-center gap-3">
-                  <div className="w-36 h-36 rounded-full" style={{ background: pieGradient(byInterest, 'current_monthly_interest') }} />
-                  <div className="w-full space-y-1">
-                    {byInterest.slice(0, 6).map((debt) => (
-                      <p key={debt.id} className="text-xs flex justify-between"><span className="truncate pr-3">{debt.lender_name}</span><span>{inrShort(debt.current_monthly_interest)}</span></p>
-                    ))}
+              {insightView === 'pie' ? (() => {
+                const pd = pieData(byInterest, 'current_monthly_interest');
+                return (
+                  <div className="flex flex-col items-center gap-4">
+                    <div className="relative w-36 h-36 flex-shrink-0">
+                      <div className="w-36 h-36 rounded-full" style={{ background: pd.gradient }} />
+                      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                        <div className="w-16 h-16 rounded-full bg-paper-card flex flex-col items-center justify-center shadow-sm">
+                          <span className="text-[9px] text-ink-mute leading-tight">/month</span>
+                          <span className="text-[11px] font-medium leading-tight">{inrShort(pd.total)}</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="w-full space-y-1.5">
+                      {byInterest.slice(0, 6).map((debt, index) => {
+                        const sharePct = pd.total > 0 ? Math.round((Number(debt.current_monthly_interest) / pd.total) * 100) : 0;
+                        return (
+                          <div key={debt.id} className="flex items-center justify-between text-xs gap-2">
+                            <div className="flex items-center gap-1.5 min-w-0">
+                              <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: pd.colors[index] }} />
+                              <span className="truncate">{debt.lender_name}</span>
+                            </div>
+                            <div className="flex items-center gap-1.5 flex-shrink-0 text-right">
+                              <span className="font-medium">{inrShort(debt.current_monthly_interest)}</span>
+                              <span className="text-[10px] text-ink-mute w-7 text-right">{sharePct}%</span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
-                </div>
-              ) : insightView === 'bar' ? (
+                );
+              })() : insightView === 'bar' ? (
                 <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 items-end min-h-[190px]">
                   {byInterest.slice(0, 6).map((debt) => {
                     const height = pct(debt.current_monthly_interest, maxMonthlyInterest);
@@ -622,14 +724,29 @@ export default function HomeClient({ user }) {
                 <span className="text-[11px] text-ink-mute">Top active debts</span>
               </div>
               {insightView === 'pie' ? (
-                <div className="flex flex-col items-center gap-3">
-                  <div
-                    className="w-36 h-36 rounded-full"
-                    style={{
-                      background: `conic-gradient(#0F6E56 0 ${paidVsOutstandingPct}%, #A32D2D 0 100%)`,
-                    }}
-                  />
-                  <p className="text-xs">Paid vs outstanding (combined)</p>
+                <div className="flex flex-col items-center gap-4">
+                  <div className="relative w-36 h-36 flex-shrink-0">
+                    <div
+                      className="w-36 h-36 rounded-full"
+                      style={{ background: `conic-gradient(#0F6E56 0 ${paidVsOutstandingPct}%, #A32D2D 0 100%)` }}
+                    />
+                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                      <div className="w-16 h-16 rounded-full bg-paper-card flex flex-col items-center justify-center shadow-sm">
+                        <span className="text-[11px] font-medium text-mint-600">{paidVsOutstandingPct}%</span>
+                        <span className="text-[9px] text-ink-mute">paid</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex gap-4 text-xs">
+                    <div className="flex items-center gap-1.5">
+                      <span className="w-2.5 h-2.5 rounded-full bg-mint-600" />
+                      <span className="text-ink-soft">Paid: {inrShort(combinedPaidVsOutstanding.paid)}</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="w-2.5 h-2.5 rounded-full bg-danger" />
+                      <span className="text-ink-soft">Left: {inrShort(combinedPaidVsOutstanding.outstanding)}</span>
+                    </div>
+                  </div>
                 </div>
               ) : (
                 <div className="space-y-4">
