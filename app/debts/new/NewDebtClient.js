@@ -14,6 +14,28 @@ const INSTRUMENT_TAG_OPTIONS = [
   { value: 'long_term', label: 'Long term' },
 ];
 
+function EmiHint({ emiAmount, monthlyAmt, emiMonths }) {
+  if (!emiAmount || !(monthlyAmt > 0)) return null;
+  const emi = parseFloat(emiAmount) || 0;
+  const principalPortion = emi - monthlyAmt;
+  if (principalPortion <= 0) {
+    return (
+      <p className="text-xs text-danger mt-1.5">
+        EMI is less than or equal to monthly interest ({inr(monthlyAmt)}). Loan will not reduce.
+      </p>
+    );
+  }
+  return (
+    <p className="text-xs text-ink-mute mt-1.5">
+      Interest: <span className="text-danger font-medium">{inr(monthlyAmt)}</span>
+      {' · '}Principal: <span className="text-mint-600 font-medium">{inr(principalPortion)}</span>
+      {emiMonths !== null && (
+        <> · Clears in <span className="font-medium">{emiMonths} month{emiMonths !== 1 ? 's' : ''}</span></>
+      )}
+    </p>
+  );
+}
+
 export default function NewDebtClient({ user }) {
   const router = useRouter();
   const [form, setForm] = useState({
@@ -44,28 +66,6 @@ export default function NewDebtClient({ user }) {
         emiAmount: parseFloat(form.emi_amount) || 0,
       })
     : null;
-
-  function EmiHint() {
-    if (!form.emi_amount || !(monthlyAmt > 0)) return null;
-    const emi = parseFloat(form.emi_amount) || 0;
-    const principalPortion = emi - monthlyAmt;
-    if (principalPortion <= 0) {
-      return (
-        <p className="text-xs text-danger mt-1.5">
-          EMI is less than or equal to monthly interest ({inr(monthlyAmt)}). Loan will not reduce.
-        </p>
-      );
-    }
-    return (
-      <p className="text-xs text-ink-mute mt-1.5">
-        Interest: <span className="text-danger font-medium">{inr(monthlyAmt)}</span>
-        {' · '}Principal: <span className="text-mint-600 font-medium">{inr(principalPortion)}</span>
-        {emiMonths !== null && (
-          <> · Clears in <span className="font-medium">{emiMonths} month{emiMonths !== 1 ? 's' : ''}</span></>
-        )}
-      </p>
-    );
-  }
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -171,7 +171,7 @@ export default function NewDebtClient({ user }) {
               onChange={e => set('emi_amount', e.target.value)}
               className="field-input"
             />
-            <EmiHint />
+            <EmiHint emiAmount={form.emi_amount} monthlyAmt={monthlyAmt} emiMonths={emiMonths} />
           </div>
 
           {/* Start date */}

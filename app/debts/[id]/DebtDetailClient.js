@@ -302,7 +302,7 @@ export default function DebtDetailClient({ user, debtId }) {
   // EMI calculations
   const emiAmount = debt.emi_amount != null ? Number(debt.emi_amount) : null;
   const currentPrincipal = Number(debt.current_principal || 0);
-  const emiInterestPortion = emiAmount != null ? Math.min(monthly, emiAmount) : null;
+  const emiInterestPortion = emiAmount != null ? monthly : null;
   const emiPrincipalPortion = emiAmount != null ? emiAmount - monthly : null;
   const emiMonthsToClose = emiAmount != null && emiPrincipalPortion > 0
     ? getMonthsToCloseWithEmi({ principal: currentPrincipal, interestRate: Number(debt.interest_rate), emiAmount })
