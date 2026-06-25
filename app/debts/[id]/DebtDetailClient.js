@@ -8,7 +8,7 @@ import { appConfirm } from '@/components/ConfirmDialog';
 import { exportDebtWorkbook } from '@/lib/export';
 import { buildSnapshotFilename, copyOrDownloadElementImage, shareOrDownloadElementImage, TILE_SNAPSHOT_BG } from '@/lib/clipboardImage';
 import { inr, inrShort, inrRaw, fmtDate, fmtMonthYear, statusColor, statusLabel } from '@/lib/format';
-import { getAccruedMonthsCount, sumInterestForMonthRange } from '@/lib/debtInterest';
+import { getAccruedMonthsCount, sumInterestForMonthRange, calculateEmiSchedule, getMonthsToCloseWithEmi } from '@/lib/debtInterest';
 
 const PAYMENT_TYPES = [
   { value: 'interest',   label: 'Interest payment' },
@@ -75,6 +75,7 @@ export default function DebtDetailClient({ user, debtId }) {
     priority: '',
     target_date: '',
     notes: '',
+    emi_amount: '',
   });
   const [eSaving, setESaving] = useState(false);
   const [eError, setEError] = useState('');
@@ -96,6 +97,7 @@ export default function DebtDetailClient({ user, debtId }) {
         priority: dr.debt.priority ?? '',
         target_date: dr.debt.target_date ? dr.debt.target_date.slice(0, 10) : '',
         notes: dr.debt.notes || '',
+        emi_amount: dr.debt.emi_amount != null ? String(dr.debt.emi_amount) : '',
       });
     }
     if (pr.payments) setPayments(pr.payments);
@@ -204,6 +206,7 @@ export default function DebtDetailClient({ user, debtId }) {
           priority: eForm.priority || null,
           target_date: eForm.target_date || null,
           notes: eForm.notes || null,
+          emi_amount: eForm.emi_amount || null,
         }),
       });
       const data = await res.json();
@@ -292,6 +295,19 @@ export default function DebtDetailClient({ user, debtId }) {
   const totalPaid = Number(debt.total_paid || 0);
   const totalOwed = Number(debt.current_principal) + unpaidInterest;
   const payableThisMonth = totalOwed + monthly;
+
+  // EMI calculations
+  const emiAmount = debt.emi_amount != null ? Number(debt.emi_amount) : null;
+  const currentPrincipal = Number(debt.current_principal || 0);
+  const emiInterestPortion = emiAmount != null ? Math.min(monthly, emiAmount) : null;
+  const emiPrincipalPortion = emiAmount != null ? emiAmount - monthly : null;
+  const emiMonthsToClose = emiAmount != null && emiPrincipalPortion > 0
+    ? getMonthsToCloseWithEmi({ principal: currentPrincipal, interestRate: Number(debt.interest_rate), emiAmount })
+    : null;
+  const emiSchedule = emiAmount != null
+    ? calculateEmiSchedule({ principal: currentPrincipal, interestRate: Number(debt.interest_rate), emiAmount, maxMonths: 120 })
+    : [];
+  const [showEmiSchedule, setShowEmiSchedule] = useState(false);
   const detailTooltip = [
     `Monthly interest: ${inr(monthly)}`,
     `Interest paid: ${inr(interestPaid)}`,
@@ -308,7 +324,7 @@ export default function DebtDetailClient({ user, debtId }) {
 💰 Borrowed    : ${inr(debt.principal)}
 ➕ Borrowed later: ${inr(totalTopupAmount)}
 📉 Current bal : ${inr(debt.current_principal)}
-📈 Interest    : ${debt.interest_rate}% /month (${inr(monthly)}/mo)
+📈 Interest    : ${debt.interest_rate}% /month (${inr(monthly)}/mo)${emiAmount != null ? '\n📐 EMI         : ' + inr(emiAmount) + (emiMonthsToClose != null ? ' · clears in ' + emiMonthsToClose + ' month' + (emiMonthsToClose !== 1 ? 's' : '') : '') : ''}
 ✅ Paid total  : ${inr(totalPaid)}
 🏦 Principal pd: ${inr(principalPaid)}
 💠 Interest pd : ${inr(interestPaid)}
@@ -477,6 +493,14 @@ via My Debt Tracker`;
                 <input type="text" value={eForm.notes}
                   onChange={e => setE('notes', e.target.value)} className="field-input" />
               </div>
+              <div className="col-span-2">
+                <label className="block text-xs text-ink-soft mb-1.5">Monthly EMI <span className="text-ink-mute">(optional — for loans)</span></label>
+                <input type="number" inputMode="numeric" min="1" step="1"
+                  placeholder="e.g. 5000"
+                  value={eForm.emi_amount}
+                  onChange={e => setE('emi_amount', e.target.value)} className="field-input" />
+                <p className="text-[10px] text-ink-mute mt-1">Set a fixed monthly EMI to track how your outstanding reduces each month.</p>
+              </div>
             </div>
 
             {eError && <p className="text-xs text-danger">{eError}</p>}
@@ -578,6 +602,78 @@ via My Debt Tracker`;
                 </div>
               ))}
             </div>
+          </section>
+        )}
+
+        {/* EMI plan section */}
+        {emiAmount != null && (
+          <section className="bg-paper-card border border-edge rounded-2xl p-4 md:p-5">
+            <h2 className="text-sm font-medium mb-3">EMI plan</h2>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+              <div className="rounded-xl border border-edge p-3">
+                <p className="text-[11px] text-ink-mute">Monthly EMI</p>
+                <p className="text-base font-medium mt-1">{inr(emiAmount)}</p>
+              </div>
+              <div className="rounded-xl border border-edge p-3">
+                <p className="text-[11px] text-ink-mute">Interest portion</p>
+                <p className="text-base font-medium mt-1 text-danger">{inr(emiInterestPortion)}</p>
+              </div>
+              <div className="rounded-xl border border-edge p-3">
+                <p className="text-[11px] text-ink-mute">Principal portion</p>
+                {emiPrincipalPortion > 0
+                  ? <p className="text-base font-medium mt-1 text-mint-600">{inr(emiPrincipalPortion)}</p>
+                  : <p className="text-base font-medium mt-1 text-danger">—</p>
+                }
+              </div>
+              <div className="rounded-xl border border-edge p-3">
+                <p className="text-[11px] text-ink-mute">Months to close</p>
+                {emiMonthsToClose != null
+                  ? <p className="text-base font-medium mt-1">{emiMonthsToClose} mo</p>
+                  : <p className="text-base font-medium mt-1 text-danger">Never</p>
+                }
+              </div>
+            </div>
+            {emiPrincipalPortion <= 0 && (
+              <p className="text-xs text-danger mb-3">⚠ Your EMI ({inr(emiAmount)}) does not cover the monthly interest ({inr(monthly)}). Increase the EMI to start reducing the principal.</p>
+            )}
+            {emiSchedule.length > 0 && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setShowEmiSchedule(v => !v)}
+                  className="text-xs text-sky-600 hover:underline mb-2">
+                  {showEmiSchedule ? 'Hide amortization schedule' : `Show amortization schedule (${emiSchedule.length} month${emiSchedule.length !== 1 ? 's' : ''})`}
+                </button>
+                {showEmiSchedule && (
+                  <div className="overflow-x-auto mt-2">
+                    <table className="w-full text-[11px] border-collapse">
+                      <thead>
+                        <tr className="text-ink-mute">
+                          <th className="text-left py-1.5 pr-3 font-medium">Mo.</th>
+                          <th className="text-right py-1.5 pr-3 font-medium">Opening</th>
+                          <th className="text-right py-1.5 pr-3 font-medium text-danger">Interest</th>
+                          <th className="text-right py-1.5 pr-3 font-medium text-mint-600">Principal</th>
+                          <th className="text-right py-1.5 pr-3 font-medium">EMI</th>
+                          <th className="text-right py-1.5 font-medium">Closing</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-edge">
+                        {emiSchedule.map(row => (
+                          <tr key={row.month_number} className="hover:bg-paper-tint">
+                            <td className="py-1.5 pr-3 text-ink-mute">{row.month_number}</td>
+                            <td className="py-1.5 pr-3 text-right">{inr(row.opening_balance)}</td>
+                            <td className="py-1.5 pr-3 text-right text-danger">{inr(row.interest)}</td>
+                            <td className="py-1.5 pr-3 text-right text-mint-600">{inr(row.principal_portion)}</td>
+                            <td className="py-1.5 pr-3 text-right">{inr(row.emi)}</td>
+                            <td className="py-1.5 text-right font-medium">{inr(row.closing_balance)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </>
+            )}
           </section>
         )}
 
