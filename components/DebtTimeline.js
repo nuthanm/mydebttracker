@@ -1,246 +1,322 @@
 'use client';
 
 import { useRef, useState } from 'react';
-import { fmtDate, inr } from '@/lib/format';
+import { inr, inrShort } from '@/lib/format';
 
-/* ─── SVG layout constants ──────────────────────────────────────────────── */
-const SVG_W = 1000;
-const SVG_H = 170;
-const PAD_X = 44;          // left/right padding inside SVG
-const DRAW_W = SVG_W - PAD_X * 2;
-const BASELINE_Y = 110;    // y of the horizontal axis rule
-const DOT_R = 7;           // dot radius
-const STACK_GAP = 20;      // vertical gap between stacked dots on same date
-const TICK_H = 7;          // axis tick height
-const TODAY_LABEL_CLEARANCE = 16; // min SVG units between a tick label and the "Today" marker
+/* ─── Layout ────────────────────────────────────────────────────────────── */
+const PAD_T   = 16;
+const PAD_B   = 50;   // room for x-axis labels (rotated in monthly view)
+const PAD_L   = 62;   // room for y-axis labels
+const PAD_R   = 16;
+const CHART_H = 130;  // drawable area height
+const SVG_H   = PAD_T + CHART_H + PAD_B;
+const GRID_N  = 4;    // number of horizontal gridlines
 
-/* ─── Colour tokens (matches tailwind config) ────────────────────────────── */
-const COLOR_ADDED   = '#A32D2D'; // danger
-const COLOR_CLEARED = '#0F6E56'; // mint-600
-const COLOR_AXIS    = '#E2DDCB'; // edge
-const COLOR_MUTE    = '#7A867F'; // ink-mute
+/* Bar group widths (pixels per period) */
+const BGW_Q = 54;  // quarterly
+const BGW_M = 38;  // monthly
 
-/* ─── Helpers ────────────────────────────────────────────────────────────── */
-function dateToMs(dateStr) {
-  if (!dateStr) return null;
-  const [y, m, d] = dateStr.split('-').map(Number);
-  return Date.UTC(y, m - 1, d);
+/* ─── Colours ───────────────────────────────────────────────────────────── */
+const C_ADDED   = '#A32D2D';
+const C_CLEARED = '#0F6E56';
+const C_LINE    = '#3B6FD4';
+const C_AXIS    = '#D6D1C0';
+const C_MUTE    = '#8A9490';
+const C_GRID    = '#EDE9DF';
+
+/* ─── Helpers ───────────────────────────────────────────────────────────── */
+function niceMax(raw) {
+  if (!raw || raw <= 0) return 100000;
+  const p = Math.pow(10, Math.floor(Math.log10(raw)));
+  return Math.ceil(raw / p) * p;
 }
 
-function svgX(dateStr, minMs, rangeMs) {
-  const ms = dateToMs(dateStr);
-  if (ms === null || rangeMs <= 0) return PAD_X;
-  const pct = Math.max(0, Math.min(1, (ms - minMs) / rangeMs));
-  return PAD_X + pct * DRAW_W;
-}
+/**
+ * Aggregate events into period buckets (monthly or quarterly).
+ * Returns { periods, quarterly } where each period has:
+ *   { period, added, cleared, outstanding, evts }
+ */
+function buildPeriods(events) {
+  if (!events?.length) return { periods: [], quarterly: false };
 
-/** Return monthly or quarterly tick marks between minMs and todayMs. */
-function buildTicks(minMs, todayMs) {
-  const totalDays = (todayMs - minMs) / 86400000;
-  const quarterly = totalDays > 540; // >18 months → quarterly
-
-  const ticks = [];
-  const start = new Date(minMs);
-  let cur = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), 1));
-  const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-
-  while (cur.getTime() <= todayMs) {
-    const mo = cur.getUTCMonth();
-    const yr = cur.getUTCFullYear();
-    if (!quarterly || mo % 3 === 0) {
-      const label = quarterly
-        ? `Q${Math.floor(mo / 3) + 1} ${yr}`
-        : `${MONTHS[mo]} '${String(yr).slice(2)}`;
-      ticks.push({ ms: cur.getTime(), label });
-    }
-    cur = new Date(Date.UTC(yr, mo + 1, 1));
+  // Aggregate by calendar month "YYYY-MM"
+  const byM = {};
+  for (const ev of events) {
+    if (!ev.date) continue;
+    const k = ev.date.slice(0, 7);
+    if (!byM[k]) byM[k] = { added: 0, cleared: 0, evts: [] };
+    if (ev.type === 'added') byM[k].added += ev.principal || 0;
+    else byM[k].cleared += ev.amount || 0;
+    byM[k].evts.push(ev);
   }
-  return ticks;
+
+  // Fill every month from the earliest event to today
+  const todayM = new Date().toISOString().slice(0, 7);
+  const minM   = Object.keys(byM).sort()[0];
+  const months = [];
+  let cur = new Date(minM + '-01T00:00:00Z');
+  const end = new Date(todayM + '-01T00:00:00Z');
+  while (cur <= end) {
+    const k = cur.toISOString().slice(0, 7);
+    months.push({ period: k, ...(byM[k] ?? { added: 0, cleared: 0, evts: [] }) });
+    cur = new Date(Date.UTC(cur.getUTCFullYear(), cur.getUTCMonth() + 1, 1));
+  }
+
+  // Compute running cumulative outstanding (debt added → up, cleared → down)
+  let running = 0;
+  for (const m of months) {
+    running = Math.max(0, running + m.added - m.cleared);
+    m.outstanding = running;
+  }
+
+  // Monthly view for ≤24 months, quarterly for longer spans
+  if (months.length <= 24) return { periods: months, quarterly: false };
+
+  // Collapse into quarters keyed "YYYY-Q#"
+  const byQ = {};
+  for (const m of months) {
+    const [yr, mo] = m.period.split('-').map(Number);
+    const qk = `${yr}-Q${Math.ceil(mo / 3)}`;
+    if (!byQ[qk]) byQ[qk] = { period: qk, added: 0, cleared: 0, evts: [], outstanding: 0 };
+    byQ[qk].added += m.added;
+    byQ[qk].cleared += m.cleared;
+    byQ[qk].evts.push(...m.evts);
+    byQ[qk].outstanding = m.outstanding; // use end-of-quarter value
+  }
+
+  const qArr = Object.entries(byQ)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([, v]) => v);
+
+  return { periods: qArr, quarterly: true };
 }
 
-/* ─── Component ──────────────────────────────────────────────────────────── */
+function fmtPeriodLabel(period, quarterly) {
+  if (quarterly) {
+    const [yr, q] = period.split('-');
+    return `${q} ${yr}`;
+  }
+  const [yr, mo] = period.split('-').map(Number);
+  const M = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  return `${M[mo - 1]} '${String(yr).slice(2)}`;
+}
+
+/* ─── Component ─────────────────────────────────────────────────────────── */
 export default function DebtTimeline({ events }) {
   const containerRef = useRef(null);
-  const [tooltip, setTooltip] = useState(null); // { pixelX, pixelY, event }
+  const [tooltip, setTooltip]   = useState(null);
 
-  if (!events || events.length === 0) return null;
+  if (!events?.length) return null;
 
-  const todayStr = new Date().toISOString().slice(0, 10);
-  const todayMs  = dateToMs(todayStr);
-  const allMs    = events.map((e) => dateToMs(e.date)).filter(Boolean);
-  const minMs    = Math.min(...allMs);
-  const rangeMs  = Math.max(todayMs - minMs, 86400000); // at least 1 day
+  const { periods, quarterly } = buildPeriods(events);
+  if (!periods.length) return null;
 
-  /* Group events by date so we can stack overlapping dots. */
-  const byDate = new Map();
-  for (const event of events) {
-    if (!byDate.has(event.date)) byDate.set(event.date, []);
-    byDate.get(event.date).push(event);
-  }
+  const BGW   = quarterly ? BGW_Q : BGW_M;
+  const BW    = Math.max(4, Math.floor(BGW * 0.27));  // individual bar width
+  const BGAP  = Math.max(2, Math.floor(BGW * 0.07));  // gap between the two bars
+  const WIDTH = Math.max(PAD_L + periods.length * BGW + PAD_R, 400);
+  const baseY = PAD_T + CHART_H;
 
-  /* Build final dot list with stacked y-offsets. */
-  const dots = [];
-  for (const [date, group] of byDate) {
-    const cx = svgX(date, minMs, rangeMs);
-    group.forEach((event, i) => {
-      dots.push({ event, cx, cy: BASELINE_Y - DOT_R - i * STACK_GAP });
-    });
-  }
+  // Y scale
+  const rawMax = Math.max(1, ...periods.map((p) => Math.max(p.added, p.cleared, p.outstanding)));
+  const yMax   = niceMax(rawMax);
+  const scY    = (v) => PAD_T + CHART_H - Math.round((Math.min(v, yMax) / yMax) * CHART_H);
 
-  const ticks = buildTicks(minMs, todayMs);
-  const todaySvgX = PAD_X + DRAW_W; // always the right edge
+  // X helpers
+  const grpX  = (i) => PAD_L + i * BGW;
+  const midX  = (i) => grpX(i) + Math.floor(BGW / 2);
+  const aBarX = (i) => grpX(i) + Math.floor((BGW - 2 * BW - BGAP) / 2);
+  const cBarX = (i) => aBarX(i) + BW + BGAP;
 
-  /* Tooltip open/close handlers */
-  function handleEnter(dotInfo, e) {
-    const rect = containerRef.current?.getBoundingClientRect();
-    if (!rect) return;
+  // Outstanding polyline
+  const linePts = periods.map((p, i) => `${midX(i)},${scY(p.outstanding)}`).join(' ');
+
+  function onEnter(period, e) {
+    if (!containerRef.current) return;
+    const rect = containerRef.current.getBoundingClientRect();
     setTooltip({
-      pixelX: e.clientX - rect.left,
-      pixelY: e.clientY - rect.top,
-      info: dotInfo,
+      period,
+      absoluteX    : e.clientX - rect.left + containerRef.current.scrollLeft,
+      absoluteY    : e.clientY - rect.top,
+      scrollLeft   : containerRef.current.scrollLeft,
+      visibleWidth : rect.width,
     });
-  }
-  function handleLeave() {
-    setTooltip(null);
   }
 
   return (
     <section className="bg-paper-card border border-edge rounded-2xl p-4 md:p-5">
-      <div className="flex justify-between items-baseline mb-4">
-        <h2 className="text-sm font-medium">Debt Lifecycle Timeline</h2>
-        <span className="text-[11px] text-ink-mute">All debts · from first to today</span>
+      {/* Header */}
+      <div className="flex justify-between items-baseline mb-3">
+        <h2 className="text-sm font-medium">Debt Overview</h2>
+        <span className="text-[11px] text-ink-mute">
+          {quarterly ? 'Quarterly' : 'Monthly'} · cumulative outstanding
+        </span>
       </div>
 
-      {/* SVG wrapper – overflow-x-auto lets it scroll on narrow screens */}
+      {/* Chart */}
       <div ref={containerRef} className="relative overflow-x-auto">
         <svg
-          viewBox={`0 0 ${SVG_W} ${SVG_H}`}
-          className="w-full min-w-[400px]"
-          aria-label="Debt lifecycle timeline"
+          width={WIDTH}
+          height={SVG_H}
+          aria-label="Debt overview chart"
           style={{ display: 'block' }}
         >
-          {/* ── Baseline rule ── */}
-          <line
-            x1={PAD_X} y1={BASELINE_Y}
-            x2={SVG_W - PAD_X} y2={BASELINE_Y}
-            stroke={COLOR_AXIS} strokeWidth="2"
-          />
-
-          {/* ── Axis ticks + labels ── */}
-          {ticks.map((tick, i) => {
-            const tx = svgX(new Date(tick.ms).toISOString().slice(0, 10), minMs, rangeMs);
-            if (tx > SVG_W - PAD_X - TODAY_LABEL_CLEARANCE) return null; // skip if too close to "Today"
+          {/* ── Y-axis gridlines + labels ── */}
+          {Array.from({ length: GRID_N }, (_, gridIndex) => {
+            const gridValue = ((gridIndex + 1) / GRID_N) * yMax;
+            const y = scY(gridValue);
             return (
-              <g key={i}>
-                <line x1={tx} y1={BASELINE_Y} x2={tx} y2={BASELINE_Y + TICK_H} stroke={COLOR_AXIS} strokeWidth="1" />
-                <text x={tx} y={BASELINE_Y + TICK_H + 11} textAnchor="middle" fontSize="9" fill={COLOR_MUTE}>
-                  {tick.label}
+              <g key={gridIndex}>
+                <line x1={PAD_L} y1={y} x2={WIDTH - PAD_R} y2={y}
+                  stroke={C_GRID} strokeWidth="1" />
+                <text x={PAD_L - 5} y={y + 4} textAnchor="end" fontSize="8.5" fill={C_MUTE}>
+                  {inrShort(gridValue)}
                 </text>
               </g>
             );
           })}
 
-          {/* ── Today marker ── */}
-          <line
-            x1={todaySvgX} y1={BASELINE_Y - 34}
-            x2={todaySvgX} y2={BASELINE_Y + TICK_H}
-            stroke={COLOR_MUTE} strokeWidth="1.5" strokeDasharray="4 3"
-          />
-          <text x={todaySvgX} y={BASELINE_Y + TICK_H + 11} textAnchor="middle" fontSize="9" fill={COLOR_MUTE}>
-            Today
-          </text>
+          {/* ── Zero label ── */}
+          <text x={PAD_L - 5} y={baseY + 4} textAnchor="end" fontSize="8.5" fill={C_MUTE}>₹0</text>
 
-          {/* ── Drop lines from dot to baseline ── */}
-          {dots.map(({ event, cx, cy }, i) => (
-            <line
-              key={`drop-${i}`}
-              x1={cx} y1={cy + DOT_R}
-              x2={cx} y2={BASELINE_Y}
-              stroke={event.type === 'added' ? COLOR_ADDED : COLOR_CLEARED}
-              strokeWidth="1" opacity="0.25"
-            />
-          ))}
+          {/* ── Baseline ── */}
+          <line x1={PAD_L} y1={baseY} x2={WIDTH - PAD_R} y2={baseY}
+            stroke={C_AXIS} strokeWidth="1.5" />
 
-          {/* ── Event dots ── */}
-          {dots.map(({ event, cx, cy }, i) => {
-            const fill = event.type === 'added' ? COLOR_ADDED : COLOR_CLEARED;
+          {/* ── Bars + x-axis labels per period ── */}
+          {periods.map((p, i) => {
+            const aH = p.added   > 0 ? Math.max(2, Math.round((p.added   / yMax) * CHART_H)) : 0;
+            const cH = p.cleared > 0 ? Math.max(2, Math.round((p.cleared / yMax) * CHART_H)) : 0;
+            const showLabel = quarterly || i % 3 === 0 || i === periods.length - 1;
+            const lx = midX(i);
+            const ly = baseY + 14;
             return (
-              <g
-                key={`dot-${i}`}
-                onMouseEnter={(e) => handleEnter({ event, cx, cy }, e)}
-                onMouseLeave={handleLeave}
+              <g key={p.period}
+                onMouseEnter={(e) => onEnter(p, e)}
+                onMouseLeave={() => setTooltip(null)}
                 style={{ cursor: 'pointer' }}
-                role="img"
-                aria-label={
-                  event.type === 'added'
-                    ? `${event.lender_name} added on ${event.date}`
-                    : `${event.lender_name} cleared on ${event.date}`
-                }
+                aria-label={fmtPeriodLabel(p.period, quarterly)}
               >
-                {/* Invisible larger hit target */}
-                <circle cx={cx} cy={cy} r={DOT_R + 6} fill="transparent" />
-                {/* Visible dot */}
-                <circle cx={cx} cy={cy} r={DOT_R} fill={fill} opacity="0.9" />
-                {/* Outer ring on cleared to make it visually distinct */}
-                {event.type === 'cleared' && (
-                  <circle cx={cx} cy={cy} r={DOT_R + 3} fill="none" stroke={fill} strokeWidth="1.5" opacity="0.4" />
+                {/* Invisible hover zone */}
+                <rect x={grpX(i)} y={PAD_T} width={BGW} height={CHART_H} fill="transparent" />
+
+                {/* Added bar (red) */}
+                {aH > 0 && (
+                  <rect x={aBarX(i)} y={baseY - aH} width={BW} height={aH}
+                    fill={C_ADDED} opacity="0.85" rx="1.5" />
                 )}
-                {/* Native tooltip fallback */}
-                <title>
-                  {event.lender_name}
-                  {event.type === 'added'
-                    ? ` · Debt added · ${event.date} · ${inr(event.principal || 0)}`
-                    : ` · Cleared · ${event.date} · ${inr(event.amount || 0)}`}
-                </title>
+
+                {/* Cleared bar (green) */}
+                {cH > 0 && (
+                  <rect x={cBarX(i)} y={baseY - cH} width={BW} height={cH}
+                    fill={C_CLEARED} opacity="0.85" rx="1.5" />
+                )}
+
+                {/* Tick mark */}
+                <line x1={lx} y1={baseY} x2={lx} y2={baseY + 4} stroke={C_AXIS} strokeWidth="1" />
+
+                {/* X-axis label */}
+                {showLabel && (
+                  quarterly ? (
+                    <text x={lx} y={ly} textAnchor="middle" fontSize="8.5" fill={C_MUTE}>
+                      {fmtPeriodLabel(p.period, true)}
+                    </text>
+                  ) : (
+                    <text
+                      x={lx} y={ly}
+                      textAnchor="end" fontSize="8.5" fill={C_MUTE}
+                      transform={`rotate(-35 ${lx} ${ly})`}
+                    >
+                      {fmtPeriodLabel(p.period, false)}
+                    </text>
+                  )
+                )}
               </g>
             );
           })}
+
+          {/* ── Outstanding line ── */}
+          <polyline
+            points={linePts}
+            fill="none"
+            stroke={C_LINE}
+            strokeWidth="2.5"
+            strokeLinejoin="round"
+            strokeLinecap="round"
+            opacity="0.9"
+            style={{ pointerEvents: 'none' }}
+          />
+
+          {/* ── Dots on outstanding line ── */}
+          {periods.map((p, i) =>
+            p.outstanding > 0 ? (
+              <circle key={`ld-${i}`}
+                cx={midX(i)} cy={scY(p.outstanding)} r="3.5"
+                fill={C_LINE} stroke="white" strokeWidth="1.5"
+                style={{ pointerEvents: 'none' }}
+              />
+            ) : null,
+          )}
         </svg>
 
-        {/* ── Hover tooltip overlay ── */}
-        {tooltip && (
-          <div
-            className="absolute z-20 pointer-events-none bg-ink text-paper text-[11px] rounded-xl px-3 py-2.5 shadow-xl max-w-[190px] leading-relaxed"
-            style={{
-              left: tooltip.pixelX,
-              top: tooltip.pixelY,
-              transform: 'translate(-50%, calc(-100% - 12px))',
-            }}
-          >
-            <p className="font-semibold truncate">{tooltip.info.event.lender_name}</p>
-            <p className="text-ink-soft mt-0.5">
-              {tooltip.info.event.type === 'added' ? '🔴 Debt added' : '🟢 Cleared'}
-            </p>
-            <p className="text-ink-soft">{fmtDate(tooltip.info.event.date)}</p>
-            <p className="font-medium mt-0.5">
-              {inr(tooltip.info.event.type === 'added'
-                ? tooltip.info.event.principal
-                : tooltip.info.event.amount)}
-            </p>
-            {tooltip.info.event.category && (
-              <p className="text-ink-mute">{tooltip.info.event.category}</p>
-            )}
-          </div>
-        )}
+        {/* ── Tooltip ── */}
+        {tooltip && (() => {
+          const tooltipWidth = 190;
+          // Clamp tooltip horizontally within the visible viewport area
+          let left = tooltip.absoluteX - tooltipWidth / 2;
+          left = Math.max(tooltip.scrollLeft + 4, Math.min(left, tooltip.scrollLeft + tooltip.visibleWidth - tooltipWidth - 4));
+          // Show above cursor; flip below if too close to top
+          let top = tooltip.absoluteY - 10;
+          const p = tooltip.period;
+          return (
+            <div
+              className="absolute z-20 pointer-events-none bg-ink text-paper text-[11px] rounded-xl px-3 py-2.5 shadow-xl leading-relaxed"
+              style={{ left, top, width: tooltipWidth, transform: 'translateY(-100%)' }}
+            >
+              <p className="font-semibold text-[12px] mb-1">
+                {fmtPeriodLabel(p.period, quarterly)}
+              </p>
+              {p.added > 0 && (
+                <p className="flex justify-between gap-2">
+                  <span className="opacity-60">Added</span>
+                  <span className="font-medium">{inr(p.added)}</span>
+                </p>
+              )}
+              {p.cleared > 0 && (
+                <p className="flex justify-between gap-2">
+                  <span className="opacity-60">Cleared</span>
+                  <span className="font-medium">{inr(p.cleared)}</span>
+                </p>
+              )}
+              <p className="flex justify-between gap-2">
+                <span className="opacity-60">Outstanding</span>
+                <span className="font-medium">{inr(p.outstanding)}</span>
+              </p>
+              {p.evts?.length > 0 && (
+                <p className="opacity-40 text-[10px] mt-1 truncate">
+                  {[...new Set(p.evts.map((e) => e.lender_name))].join(' · ')}
+                </p>
+              )}
+            </div>
+          );
+        })()}
       </div>
 
       {/* ── Legend ── */}
       <div className="flex items-center gap-5 mt-3 flex-wrap">
         <span className="flex items-center gap-1.5 text-[11px] text-ink-soft">
-          <span className="w-3 h-3 rounded-full bg-danger inline-block flex-shrink-0" />
+          <span className="w-3 h-3 rounded-sm bg-danger inline-block flex-shrink-0" />
           Debt added
         </span>
         <span className="flex items-center gap-1.5 text-[11px] text-ink-soft">
-          <span className="w-3 h-3 rounded-full bg-mint-600 inline-block flex-shrink-0 ring-1 ring-mint-600 ring-offset-1" />
+          <span className="w-3 h-3 rounded-sm bg-mint-600 inline-block flex-shrink-0" />
           Debt cleared
         </span>
+        <span className="flex items-center gap-1.5 text-[11px] text-ink-soft">
+          <span className="inline-block w-5 h-[2.5px] rounded bg-[#3B6FD4] align-middle flex-shrink-0" />
+          Outstanding
+        </span>
       </div>
-
-      {/* ── Note ── */}
-      <p className="text-[11px] text-ink-mute mt-2 leading-relaxed">
-        Dates represent when a debt was recorded (red) or when a full clearance payment was made (green). Partial payments are not shown.
-        Dots on the same date are stacked vertically.
-      </p>
     </section>
   );
 }
