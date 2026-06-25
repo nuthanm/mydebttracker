@@ -83,7 +83,7 @@ export async function PATCH(req, { params }) {
     ]);
 
     const body = await req.json();
-    const { lender_name, principal, interest_rate, rate_effective_month, target_date, category, instrument_tag, priority, notes, status } = body;
+    const { lender_name, principal, interest_rate, rate_effective_month, target_date, category, instrument_tag, priority, notes, status, emi_amount } = body;
 
     const existing = await sql`SELECT * FROM debts WHERE id = ${params.id} AND user_id = ${user.id} LIMIT 1`;
     if (!existing.length) return NextResponse.json({ error: 'Not found.' }, { status: 404 });
@@ -93,6 +93,9 @@ export async function PATCH(req, { params }) {
     const nextPriority = priority !== undefined ? normalizeDebtPriority(priority) : (debt.priority == null ? null : Number(debt.priority));
     const nextCategory = category !== undefined ? normalizeDebtCategory(category) : debt.category;
     const nextInstrumentTag = instrument_tag !== undefined ? normalizeDebtInstrumentTag(instrument_tag) : debt.instrument_tag;
+    const nextEmi = emi_amount !== undefined
+      ? (emi_amount === null || emi_amount === '' ? null : parseFloat(emi_amount))
+      : (debt.emi_amount != null ? Number(debt.emi_amount) : null);
 
     if (interest_rate !== undefined && (Number.isNaN(nextRate) || nextRate < 0)) {
       return NextResponse.json({ error: 'interest_rate must be a non-negative number.' }, { status: 400 });
@@ -102,6 +105,9 @@ export async function PATCH(req, { params }) {
     }
     if (Number.isNaN(nextInstrumentTag)) {
       return NextResponse.json({ error: 'instrument_tag must be one of temp, short_term, long_term.' }, { status: 400 });
+    }
+    if (nextEmi !== null && (Number.isNaN(nextEmi) || nextEmi <= 0)) {
+      return NextResponse.json({ error: 'emi_amount must be a positive number.' }, { status: 400 });
     }
 
     const rateHasChanged = interest_rate !== undefined && nextRate !== currentRate;
@@ -172,7 +178,8 @@ export async function PATCH(req, { params }) {
           instrument_tag = ${nextInstrumentTag},
           priority      = ${nextPriority},
           notes         = ${notes?.trim() !== undefined ? (notes?.trim() || null) : debt.notes},
-          status        = ${status ?? debt.status}
+          status        = ${status ?? debt.status},
+          emi_amount    = ${nextEmi}
         WHERE id = ${params.id} AND user_id = ${user.id}
         RETURNING *
       `;
@@ -186,7 +193,8 @@ export async function PATCH(req, { params }) {
           instrument_tag = ${nextInstrumentTag},
           priority      = ${nextPriority},
           notes         = ${notes?.trim() !== undefined ? (notes?.trim() || null) : debt.notes},
-          status        = ${status ?? debt.status}
+          status        = ${status ?? debt.status},
+          emi_amount    = ${nextEmi}
         WHERE id = ${params.id} AND user_id = ${user.id}
         RETURNING *
       `;

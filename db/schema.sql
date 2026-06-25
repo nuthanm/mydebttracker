@@ -41,6 +41,7 @@ CREATE TABLE IF NOT EXISTS debts (
   priority INTEGER,                          -- optional payoff priority (1 = highest)
   target_date DATE,                          -- optional target clearance date
   status TEXT NOT NULL DEFAULT 'active',     -- active | cleared
+  emi_amount NUMERIC(14,2),                  -- optional fixed monthly EMI (loan instalment)
   notes TEXT,
   created_at TIMESTAMPTZ DEFAULT now()
 );

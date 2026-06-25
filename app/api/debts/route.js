@@ -230,7 +230,7 @@ export async function POST(req) {
     ]);
 
     const body = await req.json();
-    const { lender_name, principal, interest_rate, start_date, target_date, category, instrument_tag, priority, notes } = body;
+    const { lender_name, principal, interest_rate, start_date, target_date, category, instrument_tag, priority, notes, emi_amount } = body;
 
     if (!lender_name || !principal || !interest_rate || !start_date) {
       return NextResponse.json({ error: 'lender_name, principal, interest_rate, and start_date are required.' }, { status: 400 });
@@ -241,6 +241,7 @@ export async function POST(req) {
     const priorityNum = normalizeDebtPriority(priority);
     const categoryName = normalizeDebtCategory(category);
     const normalizedInstrumentTag = normalizeDebtInstrumentTag(instrument_tag);
+    const emiNum = emi_amount !== undefined && emi_amount !== null && emi_amount !== '' ? parseFloat(emi_amount) : null;
     if (Number.isNaN(principalNum) || principalNum <= 0) {
       return NextResponse.json({ error: 'principal must be a positive number.' }, { status: 400 });
     }
@@ -253,9 +254,12 @@ export async function POST(req) {
     if (Number.isNaN(normalizedInstrumentTag)) {
       return NextResponse.json({ error: 'instrument_tag must be one of temp, short_term, long_term.' }, { status: 400 });
     }
+    if (emiNum !== null && (Number.isNaN(emiNum) || emiNum <= 0)) {
+      return NextResponse.json({ error: 'emi_amount must be a positive number.' }, { status: 400 });
+    }
 
     const rows = await sql`
-      INSERT INTO debts (user_id, lender_name, principal, current_principal, interest_rate, start_date, target_date, category, instrument_tag, priority, notes)
+      INSERT INTO debts (user_id, lender_name, principal, current_principal, interest_rate, start_date, target_date, category, instrument_tag, priority, notes, emi_amount)
       VALUES (
         ${user.id},
         ${lender_name.trim()},
@@ -267,7 +271,8 @@ export async function POST(req) {
         ${categoryName},
         ${normalizedInstrumentTag},
         ${priorityNum},
-        ${notes?.trim() || null}
+        ${notes?.trim() || null},
+        ${emiNum}
       )
       RETURNING *
     `;

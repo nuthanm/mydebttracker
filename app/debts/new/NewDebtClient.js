@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Shell from '@/components/Shell';
 import { toast } from '@/components/Toast';
 import { inr, monthlyInterest } from '@/lib/format';
+import { getMonthsToCloseWithEmi } from '@/lib/debtInterest';
 
 const INSTRUMENT_TAG_OPTIONS = [
   { value: '', label: 'Select tag' },
@@ -12,6 +13,28 @@ const INSTRUMENT_TAG_OPTIONS = [
   { value: 'short_term', label: 'Short term' },
   { value: 'long_term', label: 'Long term' },
 ];
+
+function EmiHint({ emiAmount, monthlyAmt, emiMonths }) {
+  if (!emiAmount || !(monthlyAmt > 0)) return null;
+  const emi = parseFloat(emiAmount) || 0;
+  const principalPortion = emi - monthlyAmt;
+  if (principalPortion <= 0) {
+    return (
+      <p className="text-xs text-danger mt-1.5">
+        EMI is less than or equal to monthly interest ({inr(monthlyAmt)}). Loan will not reduce.
+      </p>
+    );
+  }
+  return (
+    <p className="text-xs text-ink-mute mt-1.5">
+      Interest: <span className="text-danger font-medium">{inr(monthlyAmt)}</span>
+      {' · '}Principal: <span className="text-mint-600 font-medium">{inr(principalPortion)}</span>
+      {emiMonths !== null && (
+        <> · Clears in <span className="font-medium">{emiMonths} month{emiMonths !== 1 ? 's' : ''}</span></>
+      )}
+    </p>
+  );
+}
 
 export default function NewDebtClient({ user }) {
   const router = useRouter();
@@ -25,6 +48,7 @@ export default function NewDebtClient({ user }) {
     priority: '',
     target_date: '',
     notes: '',
+    emi_amount: '',
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -34,6 +58,14 @@ export default function NewDebtClient({ user }) {
   const monthlyAmt = form.principal && form.interest_rate
     ? monthlyInterest(parseFloat(form.principal) || 0, parseFloat(form.interest_rate) || 0)
     : 0;
+
+  const emiMonths = form.emi_amount && form.principal && form.interest_rate
+    ? getMonthsToCloseWithEmi({
+        principal: parseFloat(form.principal) || 0,
+        interestRate: parseFloat(form.interest_rate) || 0,
+        emiAmount: parseFloat(form.emi_amount) || 0,
+      })
+    : null;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -53,6 +85,7 @@ export default function NewDebtClient({ user }) {
           priority: form.priority || undefined,
           target_date: form.target_date || undefined,
           notes: form.notes,
+          emi_amount: form.emi_amount || undefined,
         }),
       });
       const data = await res.json();
@@ -123,6 +156,22 @@ export default function NewDebtClient({ user }) {
                 Monthly interest: <span className="text-danger font-medium">{inr(monthlyAmt)}</span>
               </p>
             )}
+          </div>
+
+          {/* EMI amount */}
+          <div>
+            <label className="block text-xs text-ink-soft mb-1.5">Monthly EMI <span className="text-ink-mute">(optional — for loans)</span></label>
+            <input
+              type="number"
+              inputMode="numeric"
+              min="1"
+              step="1"
+              placeholder="e.g. 5000"
+              value={form.emi_amount}
+              onChange={e => set('emi_amount', e.target.value)}
+              className="field-input"
+            />
+            <EmiHint emiAmount={form.emi_amount} monthlyAmt={monthlyAmt} emiMonths={emiMonths} />
           </div>
 
           {/* Start date */}
