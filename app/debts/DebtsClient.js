@@ -159,17 +159,17 @@ export default function DebtsClient({ user }) {
     }
   };
 
-  const handleCopyTile = async (debtId, lenderName) => {
-    const element = document.querySelector(`[data-copy-tile="debt-${debtId}"]`);
+  const handleCopyDebtsList = async () => {
+    const element = document.querySelector('[data-copy-tile="debts-list"]');
     if (!element) {
-      toast('Could not find tile to copy.', 'error');
+      toast('Could not find section to copy.', 'error');
       return;
     }
 
     try {
       const result = await copyOrDownloadElementImage(
         element,
-        buildSnapshotFilename(lenderName, 'tile'),
+        buildSnapshotFilename('debts-list', 'section'),
         { padding: 14, backgroundColor: TILE_SNAPSHOT_BG }
       );
       if (result === 'copied') toast('Section copied as image. Paste anywhere.');
@@ -255,9 +255,21 @@ export default function DebtsClient({ user }) {
               </button>
             ))}
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 items-center">
             <button onClick={() => setViewMode('list')} className={`chip text-xs ${viewMode === 'list' ? 'on' : ''}`}>List view</button>
             <button onClick={() => setViewMode('tile')} className={`chip text-xs ${viewMode === 'tile' ? 'on' : ''}`}>Tile view</button>
+            <button
+              type="button"
+              onClick={handleCopyDebtsList}
+              className="snapshot-action flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-medium"
+              title="Copy debts list as image"
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+              </svg>
+              Copy this section
+            </button>
           </div>
         </div>
 
@@ -319,7 +331,7 @@ export default function DebtsClient({ user }) {
         )}
 
         {!loading && filtered.length > 0 && (
-          <div className={viewMode === 'tile' ? 'grid sm:grid-cols-2 gap-3' : 'space-y-3'}>
+          <div data-copy-tile="debts-list" className={viewMode === 'tile' ? 'grid sm:grid-cols-2 gap-3' : 'space-y-3'}>
             {filtered.map(d => {
               const unpaidInterest = Number(d.unpaid_interest || 0);
               const totalOwed = Number(d.outstanding_total || Number(d.current_principal || 0) + unpaidInterest);
@@ -336,21 +348,8 @@ export default function DebtsClient({ user }) {
                     />
                   </label>
                   <div className="flex-1">
-                    <button
-                      type="button"
-                      onClick={() => handleCopyTile(d.id, d.lender_name)}
-                      className="snapshot-action mb-2 flex w-full rounded-xl px-3 py-2 text-xs font-medium"
-                      title="Copy this section as image"
-                    >
-                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-                      </svg>
-                      Copy this section
-                    </button>
                     <Link
                       href={`/debts/${d.id}`}
-                      data-copy-tile={`debt-${d.id}`}
                       className={`block bg-paper-card border border-edge rounded-2xl p-4 hover:border-ink-soft transition ${viewMode === 'tile' ? 'h-full' : ''}`}
                     >
                     <div className="flex items-start justify-between gap-3">

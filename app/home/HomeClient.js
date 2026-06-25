@@ -215,17 +215,17 @@ export default function HomeClient({ user }) {
     }
   };
 
-  const handleCopySection = async (sectionId, lenderName) => {
-    const element = document.querySelector(`[data-copy-tile="${sectionId}"]`);
+  const handleCopyPaymentSchedule = async () => {
+    const element = document.querySelector('[data-copy-tile="payment-schedule"]');
     if (!element) {
-      toast('Could not find tile to copy.', 'error');
+      toast('Could not find section to copy.', 'error');
       return;
     }
 
     try {
       const result = await copyOrDownloadElementImage(
         element,
-        buildSnapshotFilename(lenderName, 'payment'),
+        buildSnapshotFilename('payment-schedule', 'section'),
         { padding: 14, backgroundColor: TILE_SNAPSHOT_BG }
       );
       if (result === 'copied') toast('Section copied as image. Paste anywhere.');
@@ -376,11 +376,25 @@ export default function HomeClient({ user }) {
 
           {paymentSchedule.length > 0 && (
             <section className="bg-paper-card border border-edge rounded-2xl p-4 md:p-5">
-              <div className="flex justify-between items-baseline mb-4">
+              <div className="flex justify-between items-center mb-4">
                 <h2 className="text-sm font-medium">Payment Schedule</h2>
-                <span className="text-[11px] text-ink-mute">All active debts</span>
+                <div className="flex items-center gap-3">
+                  <span className="text-[11px] text-ink-mute">All active debts</span>
+                  <button
+                    type="button"
+                    onClick={handleCopyPaymentSchedule}
+                    className="snapshot-action flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-medium"
+                    title="Copy payment schedule as image"
+                  >
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                    </svg>
+                    Copy this section
+                  </button>
+                </div>
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+              <div data-copy-tile="payment-schedule" className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
                 {paymentSchedule.map((debt) => {
                   const status = debt._scheduleStatus;
                   const tileClass =
@@ -411,65 +425,51 @@ export default function HomeClient({ user }) {
                     ? toPaymentDateStr(debt.last_payment_date)
                     : null;
                   return (
-                    <div key={debt.id}>
-                      <button
-                        type="button"
-                        onClick={() => handleCopySection(`payment-${debt.id}`, debt.lender_name)}
-                        className="snapshot-action mb-2 flex w-full rounded-xl px-3 py-2 text-xs font-medium"
-                        title="Copy this section as image"
-                      >
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                          <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-                          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-                        </svg>
-                        Copy this section
-                      </button>
-                      <Link
-                        href={`/debts/${debt.id}`}
-                        data-copy-tile={`payment-${debt.id}`}
-                        className={`block rounded-xl border p-3 hover:opacity-90 transition-opacity ${tileClass}`}
-                      >
-                      <div className="flex items-start justify-between gap-2 mb-2">
-                        <p className="text-sm font-medium truncate">{debt.lender_name}</p>
-                        <span className={`flex items-center gap-1 text-[11px] font-medium rounded-full px-2 py-0.5 whitespace-nowrap flex-shrink-0 ${labelClass}`}>
-                          {status === 'overdue' && (
-                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                              <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
-                              <line x1="12" y1="9" x2="12" y2="13" />
-                              <line x1="12" y1="17" x2="12.01" y2="17" />
-                            </svg>
-                          )}
-                          {status === 'paid' && (
-                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                              <polyline points="20 6 9 17 4 12" />
-                            </svg>
-                          )}
-                          {statusLabel}
-                        </span>
-                      </div>
-                      <div className="flex justify-between items-end gap-2">
-                        <div className="min-w-0">
-                          <p className="text-[11px] text-ink-mute truncate">{debt.category || 'Uncategorized'}{debt.instrument_tag ? ` · ${instrumentTagLabel(debt.instrument_tag)}` : ''}</p>
-                          {status === 'overdue' && Number(debt.unpaid_interest || 0) > 0 && (
-                            <p className="text-xs text-danger mt-0.5">Unpaid interest: {inrShort(debt.unpaid_interest)}</p>
-                          )}
-                          {status === 'paid' && lastPayDate && (
-                            <p className="text-[11px] text-mint-700 mt-0.5">Last paid: {fmtDate(lastPayDate)}</p>
-                          )}
-                          {status === 'near' && debt.urgency_message && (
-                            <p className="text-[11px] text-honey-700 mt-0.5">{debt.urgency_message}</p>
-                          )}
-                          {status === 'neutral' && lastPayDate && (
-                            <p className="text-[11px] text-ink-mute mt-0.5">Last paid: {fmtDate(lastPayDate)}</p>
-                          )}
-                        </div>
-                        <div className="text-right flex-shrink-0">
-                          <p className="text-xs font-medium">{inrShort(debt.outstanding_total)}</p>
-                          <p className="text-[10px] text-ink-mute">{debt.interest_rate}%/mo</p>
-                        </div>
-                      </div>
-                      </Link>
+                    <Link
+                      key={debt.id}
+                      href={`/debts/${debt.id}`}
+                      className={`block rounded-xl border p-3 hover:opacity-90 transition-opacity ${tileClass}`}
+                    >
+                    <div className="flex items-start justify-between gap-2 mb-2">
+                      <p className="text-sm font-medium truncate">{debt.lender_name}</p>
+                      <span className={`flex items-center gap-1 text-[11px] font-medium rounded-full px-2 py-0.5 whitespace-nowrap flex-shrink-0 ${labelClass}`}>
+                        {status === 'overdue' && (
+                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                            <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+                            <line x1="12" y1="9" x2="12" y2="13" />
+                            <line x1="12" y1="17" x2="12.01" y2="17" />
+                          </svg>
+                        )}
+                        {status === 'paid' && (
+                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                            <polyline points="20 6 9 17 4 12" />
+                          </svg>
+                        )}
+                        {statusLabel}
+                      </span>
                     </div>
+                    <div className="flex justify-between items-end gap-2">
+                      <div className="min-w-0">
+                        <p className="text-[11px] text-ink-mute truncate">{debt.category || 'Uncategorized'}{debt.instrument_tag ? ` · ${instrumentTagLabel(debt.instrument_tag)}` : ''}</p>
+                        {status === 'overdue' && Number(debt.unpaid_interest || 0) > 0 && (
+                          <p className="text-xs text-danger mt-0.5">Unpaid interest: {inrShort(debt.unpaid_interest)}</p>
+                        )}
+                        {status === 'paid' && lastPayDate && (
+                          <p className="text-[11px] text-mint-700 mt-0.5">Last paid: {fmtDate(lastPayDate)}</p>
+                        )}
+                        {status === 'near' && debt.urgency_message && (
+                          <p className="text-[11px] text-honey-700 mt-0.5">{debt.urgency_message}</p>
+                        )}
+                        {status === 'neutral' && lastPayDate && (
+                          <p className="text-[11px] text-ink-mute mt-0.5">Last paid: {fmtDate(lastPayDate)}</p>
+                        )}
+                      </div>
+                      <div className="text-right flex-shrink-0">
+                        <p className="text-xs font-medium">{inrShort(debt.outstanding_total)}</p>
+                        <p className="text-[10px] text-ink-mute">{debt.interest_rate}%/mo</p>
+                      </div>
+                    </div>
+                    </Link>
                   );
                 })}
               </div>
