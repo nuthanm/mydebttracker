@@ -5,6 +5,7 @@ import { calculateDebtInterestSummary, ensureDebtRateChangesTable, getFirstInter
 import {
   buildDashboardPayload,
   buildDebtSummary,
+  buildDebtTimeline,
   enrichDebtWithDashboardMetrics,
   ensureDebtMetadataColumns,
   listDebtCategories,
@@ -103,6 +104,7 @@ export async function GET(req) {
           days: [],
         },
       },
+      timeline: [],
     });
   }
 
@@ -213,6 +215,7 @@ export async function GET(req) {
       from_date: fromDate,
       to_date: toDate,
     }),
+    timeline: buildDebtTimeline(enrichedAllDebts, paymentRows),
   });
 }
 

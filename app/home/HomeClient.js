@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Shell from '@/components/Shell';
 import { toast } from '@/components/Toast';
+import DebtTimeline from '@/components/DebtTimeline';
 import { exportDashboardWorkbook, exportOutflowWorkbook } from '@/lib/export';
 import { inr, inrShort, fmtDate } from '@/lib/format';
 import { buildSnapshotFilename, copyOrDownloadElementImage, TILE_SNAPSHOT_BG } from '@/lib/clipboardImage';
@@ -95,6 +96,7 @@ export default function HomeClient({ user }) {
   const [priorities, setPriorities] = useState([]);
   const [summary, setSummary] = useState(null);
   const [dashboard, setDashboard] = useState(null);
+  const [timeline, setTimeline] = useState([]);
   const [loading, setLoading] = useState(true);
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [tagFilter, setTagFilter] = useState('all');
@@ -124,6 +126,7 @@ export default function HomeClient({ user }) {
         setPriorities(data.priorities || []);
         setSummary(data.summary || null);
         setDashboard(data.dashboard || null);
+        setTimeline(data.timeline || []);
         setLoading(false);
       });
   }, [categoryFilter, tagFilter, priorityFilter, fromDate, toDate]);
@@ -368,6 +371,8 @@ export default function HomeClient({ user }) {
               )}
             </section>
           )}
+
+          <DebtTimeline events={timeline} />
 
           {paymentSchedule.length > 0 && (
             <section className="bg-paper-card border border-edge rounded-2xl p-4 md:p-5">
