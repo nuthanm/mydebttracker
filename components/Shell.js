@@ -6,16 +6,20 @@ import Toaster from './Toast';
 import ConfirmDialog from './ConfirmDialog';
 
 const NAV_ITEMS = [
-  { key: 'home',    label: 'Home',    href: '/home',    icon: 'home' },
-  { key: 'debts',   label: 'Debts',   href: '/debts',   icon: 'list' },
-  { key: 'account', label: 'Account', href: '/account', icon: 'user' },
+  { key: 'home',     label: 'Home',              href: '/home',                     icon: 'home' },
+  { key: 'debts',    label: 'Debts',             href: '/debts',                    icon: 'list' },
+  { key: 'account',  label: 'Account',           href: '/account',                  icon: 'user' },
+  { key: 'security', label: 'Security Activity', href: '/account/security-activity', icon: 'shield' },
 ];
+
+const MOBILE_NAV = NAV_ITEMS.filter((item) => item.key !== 'security');
 
 function NavIcon({ name }) {
   const common = { width: 18, height: 18, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 1.8, strokeLinecap: 'round', strokeLinejoin: 'round' };
   if (name === 'home')   return (<svg {...common}><path d="M3 9.5L12 3l9 6.5V21H3z"/><path d="M9 21V12h6v9"/></svg>);
   if (name === 'list')   return (<svg {...common}><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><circle cx="4" cy="6" r="1" fill="currentColor"/><circle cx="4" cy="12" r="1" fill="currentColor"/><circle cx="4" cy="18" r="1" fill="currentColor"/></svg>);
   if (name === 'user')   return (<svg {...common}><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-7 8-7s8 3 8 7"/></svg>);
+  if (name === 'shield') return (<svg {...common}><path d="M12 3l8 3v6c0 5-3.5 8.5-8 9-4.5-.5-8-4-8-9V6l8-3z"/><path d="M9.5 12.5l1.8 1.8 3.7-3.8"/></svg>);
   if (name === 'plus')   return (<svg {...common}><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>);
   return null;
 }
@@ -38,7 +42,9 @@ export default function Shell({ children, user }) {
         </Link>
 
         {NAV_ITEMS.map(item => {
-          const active = pathname.startsWith(item.href);
+          const active = item.key === 'account'
+            ? pathname === '/account'
+            : pathname.startsWith(item.href);
           return (
             <Link key={item.key} href={item.href}
               className={`flex items-center gap-3 px-3 py-2.5 rounded-lg mb-1 text-sm transition ${active ? 'bg-paper-card text-ink font-medium shadow-sm' : 'text-ink-soft hover:bg-paper-card/60'}`}>
@@ -87,8 +93,10 @@ export default function Shell({ children, user }) {
 
         {/* Mobile bottom nav */}
         <nav className="md:hidden fixed bottom-0 inset-x-0 bg-paper-card border-t border-edge z-30 flex items-center px-2 py-1.5">
-          {NAV_ITEMS.map(item => {
-            const active = pathname.startsWith(item.href);
+          {MOBILE_NAV.map(item => {
+            const active = item.key === 'account'
+              ? pathname === '/account' || pathname.startsWith('/account/')
+              : pathname.startsWith(item.href);
             return (
               <Link key={item.key} href={item.href}
                 className={`flex-1 flex flex-col items-center gap-1 py-1.5 text-[11px] ${active ? 'text-ink font-medium' : 'text-ink-mute'}`}>

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getCurrentUser, destroySession, verifyPin, hashPin, validatePin } from '@/lib/auth';
 import { sql } from '@/lib/db';
+import { logSecurityEvent } from '@/lib/security';
 
 export async function PATCH(req) {
   const user = await getCurrentUser();
@@ -33,6 +34,7 @@ export async function PATCH(req) {
 
     const pinHash = await hashPin(newPin);
     await sql`UPDATE users SET pin_hash = ${pinHash} WHERE id = ${user.id}`;
+    await logSecurityEvent({ req, userId: user.id, eventType: 'pin_change', status: 'success' });
     return NextResponse.json({ ok: true });
   } catch (err) {
     console.error('PATCH /api/account error', err);
@@ -40,12 +42,12 @@ export async function PATCH(req) {
   }
 }
 
-export async function DELETE() {
+export async function DELETE(req) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   try {
-    // Related sessions/debts/payments/rate changes are removed by ON DELETE CASCADE constraints.
+    await logSecurityEvent({ req, userId: user.id, eventType: 'account_delete', status: 'success' });
     await sql`DELETE FROM users WHERE id = ${user.id}`;
     await destroySession();
     return NextResponse.json({ ok: true });

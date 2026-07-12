@@ -9,6 +9,8 @@ export default function LoginPage() {
   const router = useRouter();
   const [mobile, setMobile] = useState('');
   const [pin, setPin] = useState('');
+  const [mfaCode, setMfaCode] = useState('');
+  const [challengeToken, setChallengeToken] = useState('');
   const [step, setStep] = useState('mobile');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -31,11 +33,41 @@ export default function LoginPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Could not log in.');
+
+      if (data.mfaRequired && data.challengeToken) {
+        setChallengeToken(data.challengeToken);
+        setStep('mfa');
+        setLoading(false);
+        return;
+      }
+
       router.push('/home');
       router.refresh();
     } catch (err) {
       setError(err.message);
       setPin('');
+      setLoading(false);
+    }
+  };
+
+  const submitMfa = async (e) => {
+    e.preventDefault();
+    setError('');
+    if (!mfaCode.trim()) { setError('Enter your authenticator code.'); return; }
+    setLoading(true);
+    try {
+      const res = await fetch('/api/auth/login/mfa', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ challengeToken, code: mfaCode.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Could not verify MFA.');
+      router.push('/home');
+      router.refresh();
+    } catch (err) {
+      setError(err.message);
+      setMfaCode('');
       setLoading(false);
     }
   };
@@ -81,6 +113,9 @@ export default function LoginPage() {
               Don&apos;t have an account?{' '}
               <Link href="/signup" className="text-mint-600 font-medium">Sign up</Link>
             </p>
+            <p className="text-xs text-ink-mute text-center mt-4">
+              <Link href="/">← Back to home</Link>
+            </p>
           </form>
         )}
 
@@ -102,6 +137,37 @@ export default function LoginPage() {
               ← change mobile number
             </button>
           </div>
+        )}
+
+        {step === 'mfa' && (
+          <form onSubmit={submitMfa}>
+            <h1 className="text-lg font-medium text-center">Authenticator code</h1>
+            <p className="text-sm text-ink-soft text-center mt-1.5 mb-5">Enter the 6-digit code from your authenticator app</p>
+
+            <input
+              type="text"
+              inputMode="numeric"
+              autoFocus
+              value={mfaCode}
+              onChange={(e) => setMfaCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+              className="field-input text-center tracking-[0.3em] text-lg"
+              placeholder="123456"
+            />
+
+            {error && <p className="mt-3 text-xs text-danger text-center">{error}</p>}
+
+            <button type="submit" disabled={loading} className="btn-primary w-full py-2.5 rounded-lg text-sm font-medium mt-5">
+              {loading ? 'Verifying…' : 'Verify and continue'}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => { setStep('pin'); setPin(''); setMfaCode(''); setChallengeToken(''); setError(''); }}
+              className="text-xs text-ink-mute mt-5 mx-auto block"
+            >
+              ← back to PIN
+            </button>
+          </form>
         )}
       </div>
     </div>

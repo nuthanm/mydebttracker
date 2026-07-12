@@ -9,8 +9,11 @@ export default function SignupPage() {
   const router = useRouter();
   const [name, setName] = useState('');
   const [mobile, setMobile] = useState('');
+  const [recoveryKey, setRecoveryKey] = useState('');
+  const [confirmRecoveryKey, setConfirmRecoveryKey] = useState('');
   const [pin, setPin] = useState('');
   const [confirm, setConfirm] = useState('');
+  const [backupCodes, setBackupCodes] = useState([]);
   const [step, setStep] = useState('details');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -20,6 +23,8 @@ export default function SignupPage() {
     setError('');
     if (!name.trim()) { setError('Enter your name.'); return; }
     if (!mobile.trim()) { setError('Enter your mobile number.'); return; }
+    if (recoveryKey.trim().length < 8) { setError('Recovery key must be at least 8 characters.'); return; }
+    if (recoveryKey !== confirmRecoveryKey) { setError('Recovery keys do not match.'); return; }
     setStep('pin');
   };
 
@@ -44,12 +49,13 @@ export default function SignupPage() {
       const res = await fetch('/api/auth/signup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, mobile, pin }),
+        body: JSON.stringify({ name, mobile, pin, recoveryKey }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Could not create account.');
-      router.push('/home');
-      router.refresh();
+      setBackupCodes(data.backupCodes || []);
+      setStep('backup');
+      setLoading(false);
     } catch (err) {
       setError(err.message);
       setPin('');
@@ -57,6 +63,19 @@ export default function SignupPage() {
       setStep('pin');
       setLoading(false);
     }
+  };
+
+  const copyBackupCodes = async () => {
+    try {
+      await navigator.clipboard.writeText(backupCodes.join('\n'));
+    } catch {
+      // ignore clipboard failures
+    }
+  };
+
+  const continueAfterBackup = () => {
+    router.push('/onboarding/security');
+    router.refresh();
   };
 
   return (
@@ -75,7 +94,15 @@ export default function SignupPage() {
 
             <label className="block text-xs text-ink-soft mb-1.5">Mobile number<span className="text-danger ml-0.5">*</span></label>
             <input type="tel" inputMode="tel" autoComplete="tel" placeholder="+91 98XXX XXXXX"
-              value={mobile} onChange={(e) => setMobile(e.target.value)} className="field-input" />
+              value={mobile} onChange={(e) => setMobile(e.target.value)} className="field-input mb-3" />
+
+            <label className="block text-xs text-ink-soft mb-1.5">Recovery key<span className="text-danger ml-0.5">*</span></label>
+            <input type="password" placeholder="At least 8 characters"
+              value={recoveryKey} onChange={(e) => setRecoveryKey(e.target.value)} className="field-input mb-3" />
+
+            <label className="block text-xs text-ink-soft mb-1.5">Confirm recovery key<span className="text-danger ml-0.5">*</span></label>
+            <input type="password" placeholder="Repeat recovery key"
+              value={confirmRecoveryKey} onChange={(e) => setConfirmRecoveryKey(e.target.value)} className="field-input" />
 
             {error && <p className="mt-3 text-xs text-danger">{error}</p>}
 
@@ -86,6 +113,9 @@ export default function SignupPage() {
             <p className="text-sm text-ink-soft text-center mt-5">
               Already have an account?{' '}
               <Link href="/login" className="text-mint-600 font-medium">Log in</Link>
+            </p>
+            <p className="text-xs text-ink-mute text-center mt-3">
+              <Link href="/">← Back to home</Link>
             </p>
           </form>
         )}
@@ -108,6 +138,26 @@ export default function SignupPage() {
             <PinInput value={confirm} onChange={onConfirmChange} autoFocus />
             {error && <p className="mt-3 text-xs text-danger text-center">{error}</p>}
             {loading && <p className="mt-3 text-xs text-ink-mute text-center">Creating account…</p>}
+          </div>
+        )}
+
+        {step === 'backup' && (
+          <div>
+            <h1 className="text-lg font-medium text-center">Save backup codes</h1>
+            <p className="text-sm text-ink-soft text-center mt-1.5 mb-4">
+              Store these one-time codes somewhere safe. Each can unlock MFA once.
+            </p>
+            <div className="bg-paper-tint border border-edge rounded-xl p-3 font-mono text-xs grid grid-cols-2 gap-2 mb-3">
+              {backupCodes.map((code) => (
+                <span key={code}>{code}</span>
+              ))}
+            </div>
+            <button type="button" onClick={copyBackupCodes} className="btn-ghost w-full py-2 rounded-lg text-sm mb-3">
+              Copy codes
+            </button>
+            <button type="button" onClick={continueAfterBackup} className="btn-primary w-full py-2.5 rounded-lg text-sm font-medium">
+              Continue to secure account
+            </button>
           </div>
         )}
       </div>
