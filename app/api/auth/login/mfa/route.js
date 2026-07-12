@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { sql } from '@/lib/db';
 import { createSession, verifyTotpToken } from '@/lib/auth';
-import { consumeLoginChallenge, logSecurityEvent, useBackupCode } from '@/lib/security';
+import { consumeLoginChallenge, getLoginChallenge, logSecurityEvent, useBackupCode } from '@/lib/security';
 
 export async function POST(req) {
   try {
@@ -10,7 +10,7 @@ export async function POST(req) {
       return NextResponse.json({ error: 'Challenge token and verification code are required.' }, { status: 400 });
     }
 
-    const userId = await consumeLoginChallenge(challengeToken);
+    const userId = await getLoginChallenge(challengeToken);
     if (!userId) {
       return NextResponse.json({ error: 'Challenge expired. Please sign in again.' }, { status: 401 });
     }
@@ -37,6 +37,11 @@ export async function POST(req) {
     if (!ok) {
       await logSecurityEvent({ req, userId, eventType: 'login_mfa', status: 'failed' });
       return NextResponse.json({ error: 'Invalid verification code.' }, { status: 401 });
+    }
+
+    const consumed = await consumeLoginChallenge(challengeToken);
+    if (!consumed) {
+      return NextResponse.json({ error: 'Challenge expired. Please sign in again.' }, { status: 401 });
     }
 
     await createSession(userId);
