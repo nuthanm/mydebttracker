@@ -576,19 +576,20 @@ export default function HomeClient({ user }) {
                 <h2 className="text-sm font-medium">Debt timeline</h2>
                 <span className="text-[11px] text-ink-mute">Oldest to newest · hover for details</span>
               </div>
-              <div className="space-y-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
                 {chronologicalDebts.map((debt, index) => (
                   <Link
                     key={debt.id}
                     href={`/debts/${debt.id}`}
-                    className="group relative flex items-center justify-between gap-3 rounded-xl border border-edge px-3.5 py-3 hover:bg-paper-tint transition-colors outline-none focus-visible:ring-2 focus-visible:ring-sky-600/30"
+                    className="group relative rounded-xl border border-edge bg-paper-tint p-3.5 hover:bg-paper-tint/80 transition-colors outline-none focus-visible:ring-2 focus-visible:ring-sky-600/30"
                   >
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <p className="text-sm font-medium truncate">{debt.lender_name}</p>
-                        <PriorityBadge rank={index < 2 ? index + 1 : null} />
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="text-lg font-medium">{fmtDate(debt.start_date)}</p>
+                        <p className="text-sm font-medium mt-1 truncate">{debt.lender_name}</p>
+                        <p className="text-[11px] text-ink-mute mt-0.5">{inrShort(debt.outstanding_total)} outstanding</p>
                       </div>
-                      <p className="text-[11px] text-ink-mute mt-0.5">From {fmtDate(debt.start_date)}</p>
+                      <PriorityBadge rank={index < 3 ? index + 1 : null} />
                     </div>
                     <StructuredTooltip
                       title={debt.lender_name}
