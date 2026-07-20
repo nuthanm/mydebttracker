@@ -78,6 +78,92 @@ function getPaymentScheduleStatus(debt) {
 const PAYMENT_SCHEDULE_RANK = { overdue: 0, near: 1, topup: 2, neutral: 3, paid: 4 };
 const DEFAULT_SCHEDULE_RANK = 9;
 
+const PRIORITY_BADGE_STYLES = {
+  1: 'bg-danger/10 text-danger border-danger/20',
+  2: 'bg-honey-50 text-honey-700 border-honey-600/20',
+  3: 'bg-sky-50 text-sky-700 border-sky-600/20',
+};
+
+function PriorityBadge({ rank }) {
+  if (!rank || rank > 3) return null;
+  return (
+    <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium border ${PRIORITY_BADGE_STYLES[rank]}`}>
+      Priority {rank}
+    </span>
+  );
+}
+
+function StructuredTooltip({ title, rows, footer, width = 240 }) {
+  return (
+    <div
+      className="absolute z-20 left-1/2 bottom-[calc(100%+8px)] -translate-x-1/2 pointer-events-none opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-150 bg-ink text-paper text-[11px] rounded-xl px-3 py-2.5 shadow-xl leading-relaxed"
+      style={{ width, minWidth: width }}
+    >
+      {title && <p className="font-semibold text-[12px] mb-1.5">{title}</p>}
+      <div className="space-y-1">
+        {rows.map((row) => (
+          <p key={row.label} className="flex justify-between gap-3">
+            <span className="opacity-60 shrink-0">{row.label}</span>
+            <span className="font-medium text-right">{row.value}</span>
+          </p>
+        ))}
+      </div>
+      {footer && <p className="opacity-50 text-[10px] mt-2 pt-2 border-t border-paper/10">{footer}</p>}
+    </div>
+  );
+}
+
+function formatRate(rate) {
+  const value = Number(rate || 0);
+  const formatted = Number.isInteger(value) ? String(value) : String(parseFloat(value.toFixed(3)));
+  return `${formatted}%`;
+}
+
+function groupDebtsByInterestRate(debts) {
+  const groups = new Map();
+  for (const debt of debts) {
+    const rate = Number(debt.interest_rate || 0);
+    const key = rate.toFixed(3);
+    if (!groups.has(key)) {
+      groups.set(key, { rate, debts: [], totalMonthlyInterest: 0 });
+    }
+    const group = groups.get(key);
+    group.debts.push(debt);
+    group.totalMonthlyInterest += Number(debt.current_monthly_interest || 0);
+  }
+  return [...groups.values()].sort((a, b) => b.rate - a.rate);
+}
+
+function buildDebtTooltipRows(debt) {
+  const rows = [
+    { label: 'Interest rate', value: `${debt.interest_rate}% /mo` },
+    { label: 'Borrowed', value: inr(debt.principal) },
+    { label: 'Current principal', value: inr(debt.current_principal) },
+    { label: 'Interest paid', value: inr(debt.total_interest_paid) },
+    { label: 'Principal paid', value: inr(debt.total_principal_paid) },
+    { label: 'Outstanding', value: inr(debt.outstanding_total) },
+    { label: 'Unpaid interest', value: inr(debt.unpaid_interest) },
+    { label: 'Monthly interest', value: inr(debt.current_monthly_interest) },
+  ];
+  if (debt.category) rows.push({ label: 'Category', value: debt.category });
+  if (debt.instrument_tag) rows.push({ label: 'Tag', value: instrumentTagLabel(debt.instrument_tag) });
+  if (debt.target_date) rows.push({ label: 'Target date', value: fmtDate(debt.target_date) });
+  if (debt.priority != null) rows.push({ label: 'Payoff priority', value: `P${debt.priority}` });
+  if (debt.emi_amount != null) rows.push({ label: 'EMI', value: inr(debt.emi_amount) });
+  return rows;
+}
+
+function sortDebtsByStartDate(debts) {
+  return [...debts].sort((a, b) => {
+    const left = a.start_date ? String(a.start_date).slice(0, 10) : '';
+    const right = b.start_date ? String(b.start_date).slice(0, 10) : '';
+    if (left && right && left !== right) return left < right ? -1 : 1;
+    if (left && !right) return -1;
+    if (!left && right) return 1;
+    return String(a.lender_name || '').localeCompare(String(b.lender_name || ''), undefined, { sensitivity: 'base' });
+  });
+}
+
 function pieData(items, key) {
   const total = items.reduce((sum, item) => sum + Number(item[key] || 0), 0);
   const CHART_COLORS = ['#A32D2D', '#2563eb', '#0F6E56', '#d97706', '#7c3aed', '#0891b2'];
@@ -143,6 +229,8 @@ export default function HomeClient({ user }) {
   }, [loadDashboard]);
 
   const activeDebts = useMemo(() => debts.filter((debt) => debt.status === 'active'), [debts]);
+  const interestRateGroups = useMemo(() => groupDebtsByInterestRate(activeDebts), [activeDebts]);
+  const chronologicalDebts = useMemo(() => sortDebtsByStartDate(activeDebts), [activeDebts]);
   const paymentSchedule = useMemo(() => {
     return activeDebts
       .map((debt) => ({ ...debt, _scheduleStatus: getPaymentScheduleStatus(debt) }))
@@ -400,6 +488,73 @@ export default function HomeClient({ user }) {
           )}
 
           <DebtTimeline events={timeline} />
+
+          {interestRateGroups.length > 0 && (
+            <section className="bg-paper-card border border-edge rounded-2xl p-4 md:p-5">
+              <div className="flex justify-between items-baseline mb-4">
+                <h2 className="text-sm font-medium">Interest by rate</h2>
+                <span className="text-[11px] text-ink-mute">Highest to lowest · hover for breakdown</span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+                {interestRateGroups.map((group, index) => (
+                  <div
+                    key={group.rate}
+                    tabIndex={0}
+                    className="group relative rounded-xl border border-edge bg-paper-tint p-3.5 outline-none focus-visible:ring-2 focus-visible:ring-sky-600/30"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <p className="text-lg font-medium text-danger">{formatRate(group.rate)}</p>
+                        <p className="text-sm font-medium mt-1">{inrShort(group.totalMonthlyInterest)}<span className="text-[11px] text-ink-mute font-normal"> /mo</span></p>
+                      </div>
+                      <PriorityBadge rank={index + 1} />
+                    </div>
+                    <StructuredTooltip
+                      title="From"
+                      width={220}
+                      rows={group.debts.map((debt) => ({
+                        label: debt.lender_name,
+                        value: `${inrShort(debt.current_monthly_interest)}/mo`,
+                      }))}
+                      footer={`${group.debts.length} debt${group.debts.length !== 1 ? 's' : ''} at ${formatRate(group.rate)}`}
+                    />
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {chronologicalDebts.length > 0 && (
+            <section className="bg-paper-card border border-edge rounded-2xl p-4 md:p-5">
+              <div className="flex justify-between items-baseline mb-4">
+                <h2 className="text-sm font-medium">Debt timeline</h2>
+                <span className="text-[11px] text-ink-mute">Oldest to newest · hover for details</span>
+              </div>
+              <div className="space-y-2">
+                {chronologicalDebts.map((debt, index) => (
+                  <Link
+                    key={debt.id}
+                    href={`/debts/${debt.id}`}
+                    className="group relative flex items-center justify-between gap-3 rounded-xl border border-edge px-3.5 py-3 hover:bg-paper-tint transition-colors outline-none focus-visible:ring-2 focus-visible:ring-sky-600/30"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="text-sm font-medium truncate">{debt.lender_name}</p>
+                        <PriorityBadge rank={index < 2 ? index + 1 : null} />
+                      </div>
+                      <p className="text-[11px] text-ink-mute mt-0.5">From {fmtDate(debt.start_date)}</p>
+                    </div>
+                    <StructuredTooltip
+                      title={debt.lender_name}
+                      width={260}
+                      rows={buildDebtTooltipRows(debt)}
+                      footer={debt.urgency_message || undefined}
+                    />
+                  </Link>
+                ))}
+              </div>
+            </section>
+          )}
 
           {paymentSchedule.length > 0 && (
             <section className="bg-paper-card border border-edge rounded-2xl p-4 md:p-5">
