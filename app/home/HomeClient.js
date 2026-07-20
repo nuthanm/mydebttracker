@@ -376,76 +376,82 @@ export default function HomeClient({ user }) {
 
       {!loading && !empty && summary && dashboard && (
         <div className="px-4 md:px-8 py-5 md:py-6 max-w-6xl mx-auto w-full space-y-5">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div className="space-y-3">
             <div>
               <p className="text-[11px] tracking-wider text-ink-mute uppercase">Total outstanding</p>
               <h1 className="text-3xl md:text-4xl font-medium tracking-tight mt-1">{inr(summary.total_outstanding)}</h1>
               <p className="text-sm mt-1.5 text-danger">+ {inr(summary.total_unpaid_interest)} unpaid interest</p>
             </div>
 
-            <div className="flex-1 max-w-3xl">
-              <div className="bg-paper-card border border-edge rounded-2xl p-3.5 md:p-4 space-y-3">
-                <div className="grid sm:grid-cols-2 xl:grid-cols-5 gap-2">
-                  <label className="text-[11px] text-ink-mute">
-                    Category
-                    <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)} className="field-input mt-1 min-w-0">
-                      <option value="all">All categories</option>
-                      {categories.map((category) => (
-                        <option key={category} value={category}>{category}</option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="text-[11px] text-ink-mute">
-                    Tag
-                    <select value={tagFilter} onChange={(e) => setTagFilter(e.target.value)} className="field-input mt-1 min-w-0">
-                      <option value="all">All tags</option>
-                      {instrumentTags.map((tag) => (
-                        <option key={tag} value={tag}>{instrumentTagLabel(tag)}</option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="text-[11px] text-ink-mute">
-                    Priority
-                    <select value={priorityFilter} onChange={(e) => setPriorityFilter(e.target.value)} className="field-input mt-1 min-w-0">
-                      <option value="all">All priorities</option>
-                      <option value="none">No priority</option>
-                      {priorities.map((priority) => (
-                        <option key={priority} value={priority}>P{priority}</option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="text-[11px] text-ink-mute">
-                    From date
-                    <input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className="field-input mt-1" />
-                  </label>
-                  <label className="text-[11px] text-ink-mute">
-                    To date
-                    <input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className="field-input mt-1" />
-                  </label>
-                </div>
-                <div className="flex gap-2 justify-end flex-wrap">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setCategoryFilter('all');
-                      setTagFilter('all');
-                      setPriorityFilter('all');
-                      setFromDate(DEFAULT_RANGE_DATE);
-                      setToDate(DEFAULT_RANGE_DATE);
-                    }}
-                    className="btn-ghost py-2 px-4 rounded-full text-sm"
-                  >
-                    Reset filters
-                  </button>
-                  <button onClick={handleExport} disabled={exporting} className="btn-ghost py-2 px-4 rounded-full text-sm">
-                    {exporting ? 'Exporting…' : 'Export Excel'}
-                  </button>
-                  <Link href="/debts" className="btn-ghost py-2 px-4 rounded-full text-sm">See all debts</Link>
-                  <Link href="/debts/new" className="inline-flex items-center gap-1.5 btn-primary py-2 px-4 rounded-full text-sm font-medium">
-                    + Add debt
-                  </Link>
-                </div>
-              </div>
+            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+            <select
+              value={categoryFilter}
+              onChange={(e) => setCategoryFilter(e.target.value)}
+              aria-label="Category"
+              className="field-input-compact min-w-0 w-auto max-w-[9.5rem] sm:max-w-none sm:min-w-[7.5rem]"
+            >
+              <option value="all">All categories</option>
+              {categories.map((category) => (
+                <option key={category} value={category}>{category}</option>
+              ))}
+            </select>
+            <select
+              value={tagFilter}
+              onChange={(e) => setTagFilter(e.target.value)}
+              aria-label="Tag"
+              className="field-input-compact min-w-0 w-auto max-w-[7rem] sm:max-w-none sm:min-w-[6.5rem]"
+            >
+              <option value="all">All tags</option>
+              {instrumentTags.map((tag) => (
+                <option key={tag} value={tag}>{instrumentTagLabel(tag)}</option>
+              ))}
+            </select>
+            <select
+              value={priorityFilter}
+              onChange={(e) => setPriorityFilter(e.target.value)}
+              aria-label="Priority"
+              className="field-input-compact min-w-0 w-auto max-w-[7.5rem] sm:max-w-none sm:min-w-[6.5rem]"
+            >
+              <option value="all">All priorities</option>
+              <option value="none">No priority</option>
+              {priorities.map((priority) => (
+                <option key={priority} value={priority}>P{priority}</option>
+              ))}
+            </select>
+            <span className="hidden sm:inline text-ink-mute/40 text-xs select-none" aria-hidden="true">|</span>
+            <input
+              type="date"
+              value={fromDate}
+              onChange={(e) => setFromDate(e.target.value)}
+              aria-label="From date"
+              className="field-input-compact w-auto min-w-0"
+            />
+            <span className="text-ink-mute text-xs select-none" aria-hidden="true">–</span>
+            <input
+              type="date"
+              value={toDate}
+              onChange={(e) => setToDate(e.target.value)}
+              aria-label="To date"
+              className="field-input-compact w-auto min-w-0"
+            />
+            <div className="hidden sm:block flex-1 min-w-2" />
+            <button
+              type="button"
+              onClick={() => {
+                setCategoryFilter('all');
+                setTagFilter('all');
+                setPriorityFilter('all');
+                setFromDate(DEFAULT_RANGE_DATE);
+                setToDate(DEFAULT_RANGE_DATE);
+              }}
+              className="btn-ghost py-1.5 px-3 rounded-full text-xs"
+            >
+              Reset
+            </button>
+            <button onClick={handleExport} disabled={exporting} className="btn-ghost py-1.5 px-3 rounded-full text-xs">
+              {exporting ? 'Exporting…' : 'Export'}
+            </button>
+            <Link href="/debts" className="btn-ghost py-1.5 px-3 rounded-full text-xs">All debts</Link>
             </div>
           </div>
 

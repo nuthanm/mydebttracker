@@ -54,10 +54,11 @@ export default function Shell({ children, user }) {
           );
         })}
 
+        <div className="flex-1" />
+
         <Link href="/debts/new"
-          className="flex items-center gap-3 px-3 py-2.5 rounded-lg mb-1 text-sm text-ink-soft hover:bg-paper-card/60">
-          <span className="w-[18px] h-[18px] flex items-center justify-center rounded-md bg-mint-50 text-mint-600 font-medium"><NavIcon name="plus" /></span>
-          Add debt
+          className="flex items-center justify-center gap-1.5 btn-primary py-2.5 px-4 rounded-full text-sm font-medium mx-1">
+          + Add debt
         </Link>
       </aside>
 
@@ -76,11 +77,7 @@ export default function Shell({ children, user }) {
         </header>
 
         {/* Desktop top bar */}
-        <header className="hidden md:flex sticky top-0 z-20 bg-paper-card border-b border-edge px-6 h-14 items-center justify-end gap-3">
-          <Link href="/debts/new"
-            className="flex items-center gap-1.5 btn-primary py-2 px-4 rounded-full text-sm font-medium">
-            + Add debt
-          </Link>
+        <header className="hidden md:flex sticky top-0 z-20 bg-paper-card border-b border-edge px-6 h-14 items-center justify-end">
           <Link href="/account"
             className="w-8 h-8 rounded-full bg-ember-50 text-ember-600 flex items-center justify-center text-xs font-medium hover:ring-2 hover:ring-ember-200">
             {initials}

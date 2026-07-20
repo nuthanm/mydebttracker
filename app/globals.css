@@ -54,6 +54,15 @@ input:focus, select:focus, textarea:focus {
 }
 .field-input::placeholder { color: #A8B0AB; }
 
+.field-input-compact {
+  padding: 6px 10px;
+  border: 1px solid #E2DDCB;
+  background: #fff;
+  border-radius: 9999px;
+  font-size: 12px;
+  transition: all 0.15s;
+}
+
 .chip {
   padding: 8px 12px;
   border: 1px solid #E2DDCB;
