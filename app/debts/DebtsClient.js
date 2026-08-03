@@ -27,11 +27,6 @@ function priorityLabel(value) {
   return `P${value}`;
 }
 
-function groupPersonLabel(value) {
-  const normalized = String(value || '').trim();
-  return normalized || 'Ungrouped';
-}
-
 export default function DebtsClient({ user }) {
   const [debts, setDebts] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -95,7 +90,8 @@ export default function DebtsClient({ user }) {
     const groups = new Map();
 
     for (const debt of filtered) {
-      const key = groupPersonLabel(debt.group_person_name);
+      const key = String(debt.group_person_name || '').trim();
+      if (!key) continue;
       if (!groups.has(key)) {
         groups.set(key, {
           group_person_name: key,
@@ -131,6 +127,11 @@ export default function DebtsClient({ user }) {
       }))
       .sort((left, right) => right.total_owed - left.total_owed);
   }, [filtered]);
+
+  const ungroupedDebts = useMemo(
+    () => filtered.filter((debt) => !String(debt.group_person_name || '').trim()),
+    [filtered]
+  );
 
   const allVisibleSelected = filtered.length > 0 && filtered.every((debt) => selectedIds.includes(debt.id));
 
@@ -386,7 +387,7 @@ export default function DebtsClient({ user }) {
           </div>
         )}
 
-        {!loading && filtered.length > 0 && (
+        {!loading && groupedDebts.length > 0 && (
           <section className="mb-4 space-y-3">
             <h2 className="text-sm font-medium">Grouped by person</h2>
             {groupedDebts.map((group) => (
@@ -446,9 +447,9 @@ export default function DebtsClient({ user }) {
           </section>
         )}
 
-        {!loading && filtered.length > 0 && (
+        {!loading && ungroupedDebts.length > 0 && (
           <div data-copy-tile="debts-list" className={viewMode === 'tile' ? 'grid sm:grid-cols-2 gap-3' : 'space-y-3'}>
-            {filtered.map(d => {
+            {ungroupedDebts.map(d => {
               const unpaidInterest = Number(d.unpaid_interest || 0);
               const totalOwed = Number(d.outstanding_total || Number(d.current_principal || 0) + unpaidInterest);
               const interestMonths = getAccruedMonthsCount(d.interest_start_month, d.interest_to_month);
