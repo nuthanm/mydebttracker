@@ -40,6 +40,7 @@ export default function NewDebtClient({ user }) {
   const router = useRouter();
   const [form, setForm] = useState({
     lender_name: '',
+    group_person_name: '',
     principal: '',
     interest_rate: '',
     start_date: new Date().toISOString().slice(0, 10),
@@ -77,6 +78,7 @@ export default function NewDebtClient({ user }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           lender_name: form.lender_name,
+          group_person_name: form.group_person_name || undefined,
           principal: form.principal,
           interest_rate: form.interest_rate,
           start_date: form.start_date,
@@ -119,6 +121,18 @@ export default function NewDebtClient({ user }) {
               required
               className="field-input"
             />
+          </div>
+
+          <div>
+            <label className="block text-xs text-ink-soft mb-1.5">Group person name <span className="text-ink-mute">(optional)</span></label>
+            <input
+              type="text"
+              placeholder="e.g. Shiva"
+              value={form.group_person_name}
+              onChange={e => set('group_person_name', e.target.value)}
+              className="field-input"
+            />
+            <p className="text-xs text-ink-mute mt-1.5">Use this when multiple loans should roll up under one person.</p>
           </div>
 
           {/* Principal */}

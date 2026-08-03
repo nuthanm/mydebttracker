@@ -67,6 +67,7 @@ export default function DebtDetailClient({ user, debtId }) {
   const [showEdit, setShowEdit] = useState(false);
   const [eForm, setEForm] = useState({
     lender_name: '',
+    group_person_name: '',
     principal: '',
     interest_rate: '',
     rate_effective_month: currentMonth,
@@ -92,6 +93,7 @@ export default function DebtDetailClient({ user, debtId }) {
       setDebt(dr.debt);
       setEForm({
         lender_name: dr.debt.lender_name || '',
+        group_person_name: dr.debt.group_person_name || '',
         principal: dr.debt.principal || '',
         interest_rate: dr.debt.interest_rate || '',
         rate_effective_month: currentMonth,
@@ -201,6 +203,7 @@ export default function DebtDetailClient({ user, debtId }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           lender_name: eForm.lender_name,
+          group_person_name: eForm.group_person_name || null,
           principal: eForm.principal,
           interest_rate: eForm.interest_rate,
           rate_effective_month: eForm.rate_effective_month,
@@ -322,6 +325,7 @@ export default function DebtDetailClient({ user, debtId }) {
   const shareSummaryText = `📋 Debt Summary
 ━━━━━━━━━━━━━━━━━━━━━━━
 👤 Lender      : ${debt.lender_name}
+👥 Group       : ${debt.group_person_name || '—'}
 📅 Since       : ${fmtDate(debt.start_date)}${debt.target_date ? '\n🎯 Target      : ' + fmtDate(debt.target_date) : ''}
 💰 Borrowed    : ${inr(debt.principal)}
 ➕ Borrowed later: ${inr(totalTopupAmount)}
@@ -364,6 +368,11 @@ via My Debt Tracker`;
               {debt.priority != null && (
                 <span className="text-[10px] px-2 py-0.5 rounded-full font-medium bg-plum-50 text-plum-600">
                   P{debt.priority}
+                </span>
+              )}
+              {debt.group_person_name && (
+                <span className="text-[10px] px-2 py-0.5 rounded-full font-medium bg-teal-50 text-teal-700">
+                  Group: {debt.group_person_name}
                 </span>
               )}
             </div>
@@ -457,6 +466,11 @@ via My Debt Tracker`;
                 <p className="text-[10px] text-ink-mute mt-1">New rate will be applied from the selected month onward. Older pending interest stays unchanged.</p>
               </div>
               <div>
+                <label className="block text-xs text-ink-soft mb-1.5">Group person name <span className="text-ink-mute">(optional)</span></label>
+                <input type="text" value={eForm.group_person_name}
+                  onChange={e => setE('group_person_name', e.target.value)} className="field-input" />
+              </div>
+              <div>
                 <label className="block text-xs text-ink-soft mb-1.5">New rate effective from</label>
                 <input
                   type="month"
@@ -545,6 +559,10 @@ via My Debt Tracker`;
           <div className="bg-paper-card border border-edge rounded-xl p-3.5">
             <p className="text-[11px] text-ink-mute">Interest paid since borrowing</p>
             <p className="text-base font-medium mt-1 text-sky-600">{inr(interestPaid)}</p>
+          </div>
+          <div className="bg-paper-card border border-edge rounded-xl p-3.5">
+            <p className="text-[11px] text-ink-mute">Group person</p>
+            <p className="text-base font-medium mt-1">{debt.group_person_name || '—'}</p>
           </div>
           <div className="bg-paper-card border border-edge rounded-xl p-3.5">
             <p className="text-[11px] text-ink-mute">Category</p>

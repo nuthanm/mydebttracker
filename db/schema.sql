@@ -81,6 +81,7 @@ CREATE TABLE IF NOT EXISTS debts (
   current_principal NUMERIC(14,2) NOT NULL,  -- reduces as principal is repaid
   interest_rate NUMERIC(6,3) NOT NULL,       -- monthly interest rate in %
   start_date DATE NOT NULL DEFAULT CURRENT_DATE,
+  group_person_name TEXT,                    -- optional grouping person label
   category TEXT,                             -- optional category label (bank/family/etc.)
   instrument_tag TEXT,                       -- optional tag (temp | short_term | long_term)
   priority INTEGER,                          -- optional payoff priority (1 = highest)

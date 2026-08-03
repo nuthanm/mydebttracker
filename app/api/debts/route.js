@@ -11,6 +11,7 @@ import {
   listDebtCategories,
   listDebtInstrumentTags,
   normalizeDebtCategory,
+  normalizeDebtGroupPersonName,
   normalizeDebtInstrumentTag,
   normalizeDebtPriority,
 } from '@/lib/debtDashboard';
@@ -231,7 +232,7 @@ export async function POST(req) {
     ]);
 
     const body = await req.json();
-    const { lender_name, principal, interest_rate, start_date, target_date, category, instrument_tag, priority, notes, emi_amount } = body;
+    const { lender_name, principal, interest_rate, start_date, target_date, group_person_name, category, instrument_tag, priority, notes, emi_amount } = body;
 
     if (!lender_name || !principal || !interest_rate || !start_date) {
       return NextResponse.json({ error: 'lender_name, principal, interest_rate, and start_date are required.' }, { status: 400 });
@@ -240,6 +241,7 @@ export async function POST(req) {
     const principalNum = parseFloat(principal);
     const rateNum = parseFloat(interest_rate);
     const priorityNum = normalizeDebtPriority(priority);
+    const groupPersonName = normalizeDebtGroupPersonName(group_person_name);
     const categoryName = normalizeDebtCategory(category);
     const normalizedInstrumentTag = normalizeDebtInstrumentTag(instrument_tag);
     const emiNum = emi_amount !== undefined && emi_amount !== null && emi_amount !== '' ? parseFloat(emi_amount) : null;
@@ -260,7 +262,7 @@ export async function POST(req) {
     }
 
     const rows = await sql`
-      INSERT INTO debts (user_id, lender_name, principal, current_principal, interest_rate, start_date, target_date, category, instrument_tag, priority, notes, emi_amount)
+      INSERT INTO debts (user_id, lender_name, principal, current_principal, interest_rate, start_date, target_date, group_person_name, category, instrument_tag, priority, notes, emi_amount)
       VALUES (
         ${user.id},
         ${lender_name.trim()},
@@ -269,6 +271,7 @@ export async function POST(req) {
         ${rateNum},
         ${start_date},
         ${target_date || null},
+        ${groupPersonName},
         ${categoryName},
         ${normalizedInstrumentTag},
         ${priorityNum},

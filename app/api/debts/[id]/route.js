@@ -13,6 +13,7 @@ import {
   enrichDebtWithDashboardMetrics,
   ensureDebtMetadataColumns,
   normalizeDebtCategory,
+  normalizeDebtGroupPersonName,
   normalizeDebtInstrumentTag,
   normalizeDebtPriority,
 } from '@/lib/debtDashboard';
@@ -82,7 +83,7 @@ export async function PATCH(req, { params }) {
     ]);
 
     const body = await req.json();
-    const { lender_name, principal, interest_rate, rate_effective_month, target_date, category, instrument_tag, priority, notes, status, emi_amount } = body;
+    const { lender_name, principal, interest_rate, rate_effective_month, target_date, group_person_name, category, instrument_tag, priority, notes, status, emi_amount } = body;
 
     const existing = await sql`SELECT * FROM debts WHERE id = ${params.id} AND user_id = ${user.id} LIMIT 1`;
     if (!existing.length) return NextResponse.json({ error: 'Not found.' }, { status: 404 });
@@ -90,6 +91,7 @@ export async function PATCH(req, { params }) {
     const currentRate = Number(debt.interest_rate || 0);
     const nextRate = interest_rate !== undefined ? parseFloat(interest_rate) : currentRate;
     const nextPriority = priority !== undefined ? normalizeDebtPriority(priority) : (debt.priority == null ? null : Number(debt.priority));
+    const nextGroupPersonName = group_person_name !== undefined ? normalizeDebtGroupPersonName(group_person_name) : debt.group_person_name;
     const nextCategory = category !== undefined ? normalizeDebtCategory(category) : debt.category;
     const nextInstrumentTag = instrument_tag !== undefined ? normalizeDebtInstrumentTag(instrument_tag) : debt.instrument_tag;
     const nextEmi = emi_amount !== undefined
@@ -173,6 +175,7 @@ export async function PATCH(req, { params }) {
           current_principal = ${currentPrincipalValue},
           interest_rate = ${nextRate},
           target_date   = ${target_date !== undefined ? (target_date || null) : debt.target_date},
+          group_person_name = ${nextGroupPersonName},
           category      = ${nextCategory},
           instrument_tag = ${nextInstrumentTag},
           priority      = ${nextPriority},
@@ -188,6 +191,7 @@ export async function PATCH(req, { params }) {
           lender_name   = ${lender_name?.trim() ?? debt.lender_name},
           interest_rate = ${nextRate},
           target_date   = ${target_date !== undefined ? (target_date || null) : debt.target_date},
+          group_person_name = ${nextGroupPersonName},
           category      = ${nextCategory},
           instrument_tag = ${nextInstrumentTag},
           priority      = ${nextPriority},

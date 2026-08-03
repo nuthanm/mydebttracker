@@ -27,6 +27,11 @@ function priorityLabel(value) {
   return `P${value}`;
 }
 
+function groupPersonLabel(value) {
+  const normalized = String(value || '').trim();
+  return normalized || 'Ungrouped';
+}
+
 export default function DebtsClient({ user }) {
   const [debts, setDebts] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -40,6 +45,7 @@ export default function DebtsClient({ user }) {
   const [priorityFilter, setPriorityFilter] = useState('all');
   const [viewMode, setViewMode] = useState('list');
   const [selectedIds, setSelectedIds] = useState([]);
+  const [bulkGroupPerson, setBulkGroupPerson] = useState('');
   const [bulkCategory, setBulkCategory] = useState('');
   const [bulkTag, setBulkTag] = useState('');
   const [bulkPriority, setBulkPriority] = useState('');
@@ -80,10 +86,51 @@ export default function DebtsClient({ user }) {
     .filter(d => {
       const term = search.trim().toLowerCase();
       if (!term) return true;
-      return [d.lender_name, d.notes, d.category, d.instrument_tag, instrumentTagLabel(d.instrument_tag)]
+      return [d.lender_name, d.group_person_name, d.notes, d.category, d.instrument_tag, instrumentTagLabel(d.instrument_tag)]
         .filter(Boolean)
         .some((value) => value.toLowerCase().includes(term));
     });
+
+  const groupedDebts = useMemo(() => {
+    const groups = new Map();
+
+    for (const debt of filtered) {
+      const key = groupPersonLabel(debt.group_person_name);
+      if (!groups.has(key)) {
+        groups.set(key, {
+          group_person_name: key,
+          debts: [],
+          total_principal: 0,
+          total_current_principal: 0,
+          total_unpaid_interest: 0,
+          total_interest_paid: 0,
+          total_monthly_interest: 0,
+          total_owed: 0,
+        });
+      }
+
+      const group = groups.get(key);
+      const currentPrincipal = Number(debt.current_principal || 0);
+      const unpaidInterest = Number(debt.unpaid_interest || 0);
+      const interestPaid = Number(debt.total_interest_paid || 0);
+      const monthlyInterest = Number(debt.current_monthly_interest || 0);
+
+      group.debts.push(debt);
+      group.total_principal += Number(debt.principal || 0);
+      group.total_current_principal += currentPrincipal;
+      group.total_unpaid_interest += unpaidInterest;
+      group.total_interest_paid += interestPaid;
+      group.total_monthly_interest += monthlyInterest;
+      group.total_owed += currentPrincipal + unpaidInterest;
+    }
+
+    return Array.from(groups.values())
+      .map((group) => ({
+        ...group,
+        debts: [...group.debts].sort((left, right) => Number(right.outstanding_total || 0) - Number(left.outstanding_total || 0)),
+      }))
+      .sort((left, right) => right.total_owed - left.total_owed);
+  }, [filtered]);
 
   const allVisibleSelected = filtered.length > 0 && filtered.every((debt) => selectedIds.includes(debt.id));
 
@@ -110,14 +157,15 @@ export default function DebtsClient({ user }) {
       toast('Select at least one debt.', 'error');
       return;
     }
-    if (bulkCategory.trim() === '' && bulkTag === '' && bulkPriority === '') {
-      toast('Choose a category, tag, or priority to update.', 'error');
+    if (bulkGroupPerson.trim() === '' && bulkCategory.trim() === '' && bulkTag === '' && bulkPriority === '') {
+      toast('Choose a group, category, tag, or priority to update.', 'error');
       return;
     }
 
     setBulkSaving(true);
     try {
       const payload = {};
+      if (bulkGroupPerson.trim() !== '') payload.group_person_name = bulkGroupPerson.trim();
       if (bulkCategory.trim() !== '') payload.category = bulkCategory.trim();
       if (bulkTag !== '') payload.instrument_tag = bulkTag === 'none' ? null : bulkTag;
       if (bulkPriority !== '') payload.priority = bulkPriority === 'none' ? null : Number(bulkPriority);
@@ -148,6 +196,7 @@ export default function DebtsClient({ user }) {
         toast(`Updated ${selectedIds.length} debts.`);
       }
 
+      setBulkGroupPerson('');
       setBulkCategory('');
       setBulkTag('');
       setBulkPriority('');
@@ -223,7 +272,7 @@ export default function DebtsClient({ user }) {
             type="search"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search by lender, notes, or category"
+            placeholder="Search by lender, group person, notes, or category"
             className="field-input"
           />
           <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)} className="field-input">
@@ -274,11 +323,18 @@ export default function DebtsClient({ user }) {
         </div>
 
         <section className="bg-paper-card border border-edge rounded-2xl p-3.5 mb-4">
-          <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-[auto,minmax(0,1fr),180px,180px,auto,auto] items-center">
+          <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-[auto,minmax(0,1fr),minmax(0,1fr),180px,180px,auto,auto] items-center">
             <label className="flex items-center gap-2 text-xs text-ink-soft">
               <input type="checkbox" checked={allVisibleSelected} onChange={toggleSelectAllVisible} className="accent-ink" />
               Select visible
             </label>
+            <input
+              type="text"
+              value={bulkGroupPerson}
+              onChange={(e) => setBulkGroupPerson(e.target.value)}
+              placeholder="Bulk group person (leave blank to skip)"
+              className="field-input"
+            />
             <input
               type="text"
               value={bulkCategory}
@@ -331,6 +387,66 @@ export default function DebtsClient({ user }) {
         )}
 
         {!loading && filtered.length > 0 && (
+          <section className="mb-4 space-y-3">
+            <h2 className="text-sm font-medium">Grouped by person</h2>
+            {groupedDebts.map((group) => (
+              <div key={group.group_person_name} className="bg-paper-card border border-edge rounded-2xl p-4">
+                <div className="flex items-start justify-between gap-3 flex-wrap">
+                  <div>
+                    <p className="text-sm font-medium">{group.group_person_name}</p>
+                    <p className="text-xs text-ink-mute mt-1">{group.debts.length} debt{group.debts.length !== 1 ? 's' : ''}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xs text-ink-mute">Group total owed</p>
+                    <p className="text-sm font-medium">{inr(group.total_owed)}</p>
+                  </div>
+                </div>
+
+                <div className="mt-2 text-[11px] text-ink-mute flex flex-wrap gap-x-4 gap-y-1">
+                  <span>Borrowed: <span className="text-ink font-medium">{inr(group.total_principal)}</span></span>
+                  <span>Current principal: <span className="text-ink font-medium">{inr(group.total_current_principal)}</span></span>
+                  <span>Interest paid: <span className="text-sky-600 font-medium">{inr(group.total_interest_paid)}</span></span>
+                  <span>Unpaid interest: <span className="text-danger font-medium">{inr(group.total_unpaid_interest)}</span></span>
+                  <span>Monthly interest: <span className="text-danger font-medium">{inr(group.total_monthly_interest)}</span></span>
+                </div>
+
+                <div className="mt-3 space-y-2">
+                  {group.debts.map((debt) => {
+                    const interestMonths = getAccruedMonthsCount(debt.interest_start_month, debt.interest_to_month);
+                    return (
+                      <Link
+                        key={debt.id}
+                        href={`/debts/${debt.id}`}
+                        className="block rounded-xl border border-edge px-3 py-2.5 hover:border-ink-soft transition"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="text-xs font-medium truncate">{debt.lender_name}</p>
+                            <p className="text-[11px] text-ink-mute mt-1">
+                              {debt.interest_rate}% /mo · {inr(debt.principal)} · from {fmtMonthYear(debt.start_date)}
+                            </p>
+                            <p className="text-[11px] text-ink-mute mt-0.5">
+                              Interest paid: <span className="text-sky-600 font-medium">{inr(debt.total_interest_paid)}</span>
+                              {debt.interest_start_month && debt.interest_to_month && (
+                                <span> · timeline {fmtMonthYear(debt.interest_start_month)} – {fmtMonthYear(debt.interest_to_month)} ({interestMonths} mo)</span>
+                              )}
+                            </p>
+                          </div>
+                          <div className="text-right flex-shrink-0">
+                            <p className="text-xs text-ink-mute">Owed</p>
+                            <p className="text-xs font-medium">{inr(debt.outstanding_total)}</p>
+                          </div>
+                        </div>
+                      </Link>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </section>
+        )}
+
+        {!loading && filtered.length > 0 && (
           <div data-copy-tile="debts-list" className={viewMode === 'tile' ? 'grid sm:grid-cols-2 gap-3' : 'space-y-3'}>
             {filtered.map(d => {
               const unpaidInterest = Number(d.unpaid_interest || 0);
@@ -372,6 +488,11 @@ export default function DebtsClient({ user }) {
                           {d.priority != null && (
                             <span className="text-[10px] px-2 py-0.5 rounded-full bg-plum-50 text-plum-600 font-medium">
                               P{d.priority}
+                            </span>
+                          )}
+                          {d.group_person_name && (
+                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-teal-50 text-teal-700 font-medium">
+                              Group: {d.group_person_name}
                             </span>
                           )}
                         </div>
