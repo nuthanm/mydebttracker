@@ -112,9 +112,10 @@ export async function PATCH(req, { params }) {
     }
 
     const rateHasChanged = interest_rate !== undefined && nextRate !== currentRate;
+    const shouldUpdateRateTimeline = interest_rate !== undefined && rate_effective_month !== undefined;
     let effectiveMonth = null;
 
-    if (rateHasChanged) {
+    if (rateHasChanged || shouldUpdateRateTimeline) {
       effectiveMonth = normalizeEffectiveMonth(rate_effective_month);
       if (!effectiveMonth) {
         return NextResponse.json({ error: 'Provide a valid effective month for the new interest rate.' }, { status: 400 });
@@ -127,9 +128,6 @@ export async function PATCH(req, { params }) {
           { error: `Effective month cannot be earlier than ${(startMonth || '').slice(0, 7) || 'the loan start month'}.` },
           { status: 400 }
         );
-      }
-      if (currentMonth && compareEffectiveMonths(effectiveMonth, currentMonth) > 0) {
-        return NextResponse.json({ error: 'Effective month cannot be in the future.' }, { status: 400 });
       }
     }
 
@@ -179,7 +177,7 @@ export async function PATCH(req, { params }) {
           category      = ${nextCategory},
           instrument_tag = ${nextInstrumentTag},
           priority      = ${nextPriority},
-          notes         = ${notes?.trim() !== undefined ? (notes?.trim() || null) : debt.notes},
+          notes         = ${notes !== undefined ? (typeof notes === 'string' ? (notes.trim() || null) : null) : debt.notes},
           status        = ${status ?? debt.status},
           emi_amount    = ${nextEmi}
         WHERE id = ${params.id} AND user_id = ${user.id}
@@ -195,7 +193,7 @@ export async function PATCH(req, { params }) {
           category      = ${nextCategory},
           instrument_tag = ${nextInstrumentTag},
           priority      = ${nextPriority},
-          notes         = ${notes?.trim() !== undefined ? (notes?.trim() || null) : debt.notes},
+          notes         = ${notes !== undefined ? (typeof notes === 'string' ? (notes.trim() || null) : null) : debt.notes},
           status        = ${status ?? debt.status},
           emi_amount    = ${nextEmi}
         WHERE id = ${params.id} AND user_id = ${user.id}
@@ -203,7 +201,7 @@ export async function PATCH(req, { params }) {
       `;
     }
 
-    if (rateHasChanged) {
+    if (rateHasChanged || shouldUpdateRateTimeline) {
       await ensureInitialRateChange(sql, debt);
       await sql`
         INSERT INTO debt_rate_changes (debt_id, effective_month, interest_rate)
