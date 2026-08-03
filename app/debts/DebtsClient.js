@@ -38,7 +38,7 @@ export default function DebtsClient({ user }) {
   const [instrumentTags, setInstrumentTags] = useState([]);
   const [priorities, setPriorities] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState('all'); // all | active | cleared
+  const [filter, setFilter] = useState('active'); // all | active | cleared
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [tagFilter, setTagFilter] = useState('all');
