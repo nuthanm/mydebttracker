@@ -524,6 +524,12 @@ export default function DebtsClient({ user }) {
                           </span>
                         )}
                       </span>
+                      <span>
+                        This month: <span className="text-danger font-medium">{inr(d.current_month_accrued_interest)}</span>
+                        {Number(d.current_month_days || 0) > 0 && (
+                          <span className="text-ink-mute"> ({d.current_month_elapsed_days || 0}/{d.current_month_days} days)</span>
+                        )}
+                      </span>
                       <span className="ml-auto">Total owed: <span className="text-ink font-medium">{inr(totalOwed)}</span></span>
                     </div>
                     </Link>

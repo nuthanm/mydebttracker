@@ -294,6 +294,10 @@ export default function DebtDetailClient({ user, debtId }) {
 
   const months = getAccruedMonthsCount(debt.interest_start_month, debt.interest_to_month);
   const monthly = Number(debt.current_monthly_interest || 0);
+  const dailyInterest = Number(debt.current_month_daily_interest || 0);
+  const currentMonthAccruedInterest = Number(debt.current_month_accrued_interest || 0);
+  const currentMonthElapsedDays = Number(debt.current_month_elapsed_days || 0);
+  const currentMonthDays = Number(debt.current_month_days || 0);
   const unpaidInterest = Number(debt.unpaid_interest || 0);
   const principalPaid = Number(debt.total_principal_paid || 0);
   const interestPaid = Number(debt.total_interest_paid || 0);
@@ -315,6 +319,8 @@ export default function DebtDetailClient({ user, debtId }) {
     : [];
   const detailTooltip = [
     `Monthly interest: ${inr(monthly)}`,
+    `Daily interest: ${inr(dailyInterest)}`,
+    `Interest accrued this month: ${inr(currentMonthAccruedInterest)} (${currentMonthElapsedDays}/${currentMonthDays} days)`,
     `Interest paid: ${inr(interestPaid)}`,
     `Principal paid: ${inr(principalPaid)}`,
     `Borrowed later: ${inr(totalTopupAmount)}`,
@@ -585,6 +591,15 @@ via My Debt Tracker`;
                 : debt.interest_start_month
                   ? `Starts from ${fmtMonthYear(debt.interest_start_month)}`
                   : 'No accrued interest yet'}
+            </p>
+          </div>
+          <div className="bg-paper-card border border-edge rounded-xl p-3.5">
+            <p className="text-[11px] text-ink-mute">Interest accrued this month</p>
+            <p className="text-base font-medium mt-1 text-danger">{inr(currentMonthAccruedInterest)}</p>
+            <p className="text-[10px] text-ink-mute">
+              {currentMonthDays > 0
+                ? `${currentMonthElapsedDays} of ${currentMonthDays} days · ${inr(dailyInterest)}/day`
+                : 'No current interest accrual'}
             </p>
           </div>
           <div className="bg-paper-card border border-edge rounded-xl p-3.5 bg-danger/5 border-danger/20">
