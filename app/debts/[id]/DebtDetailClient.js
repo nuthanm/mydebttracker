@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import Shell from '@/components/Shell';
 import { toast } from '@/components/Toast';
@@ -30,6 +31,11 @@ function instrumentTagLabel(value) {
   return value || '';
 }
 
+function DetailFrame({ readOnly, user, children }) {
+  if (readOnly) return children;
+  return <Shell user={user}>{children}</Shell>;
+}
+
 /** Returns the number of whole months covered by a YYYY-MM range (inclusive). */
 function monthsInRange(fromYM, toYM) {
   if (!fromYM || !toYM) return 0;
@@ -38,14 +44,22 @@ function monthsInRange(fromYM, toYM) {
   return (ty - fy) * 12 + (tm - fm) + 1;
 }
 
-export default function DebtDetailClient({ user, debtId }) {
+export default function DebtDetailClient({
+  user,
+  debtId,
+  readOnly = false,
+  initialDebt = null,
+  initialPayments = null,
+  backHref = '/debts',
+}) {
   const router = useRouter();
   const shareRef = useRef(null);
   const [currentMonth] = useState(() => new Date().toISOString().slice(0, 7));
+  const seeded = initialDebt != null && Array.isArray(initialPayments);
 
-  const [debt, setDebt] = useState(null);
-  const [payments, setPayments] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [debt, setDebt] = useState(seeded ? initialDebt : null);
+  const [payments, setPayments] = useState(seeded ? initialPayments : []);
+  const [loading, setLoading] = useState(!seeded && !readOnly);
 
   // Payment form
   const [showForm, setShowForm] = useState(false);
@@ -84,7 +98,14 @@ export default function DebtDetailClient({ user, debtId }) {
   // EMI amortization toggle
   const [showEmiSchedule, setShowEmiSchedule] = useState(false);
 
+  useEffect(() => {
+    if (readOnly && !seeded && process.env.NODE_ENV !== 'production') {
+      console.warn('DebtDetailClient: pass initialDebt and initialPayments when readOnly=true (view links have no auth for /api/debts).');
+    }
+  }, [readOnly, seeded]);
+
   const loadData = useCallback(async () => {
+    if (readOnly) return;
     const [dr, pr] = await Promise.all([
       fetch(`/api/debts/${debtId}`).then(r => r.json()),
       fetch(`/api/debts/${debtId}/payments`).then(r => r.json()),
@@ -107,9 +128,13 @@ export default function DebtDetailClient({ user, debtId }) {
     }
     if (pr.payments) setPayments(pr.payments);
     setLoading(false);
-  }, [currentMonth, debtId]);
+  }, [currentMonth, debtId, readOnly]);
 
-  useEffect(() => { loadData(); }, [loadData]);
+  useEffect(() => {
+    if (seeded || readOnly) return undefined;
+    loadData();
+    return undefined;
+  }, [seeded, readOnly, loadData]);
 
   const setP = (k, v) => setPForm(f => ({ ...f, [k]: v }));
   const setE = (k, v) => setEForm(f => ({ ...f, [k]: v }));
@@ -124,6 +149,7 @@ export default function DebtDetailClient({ user, debtId }) {
 
   const handlePaymentSubmit = async (e) => {
     e.preventDefault();
+    if (readOnly) return;
     setPError('');
     setPSaving(true);
     try {
@@ -164,6 +190,7 @@ export default function DebtDetailClient({ user, debtId }) {
   };
 
   const handleDeletePayment = async (paymentId) => {
+    if (readOnly) return;
     if (!await appConfirm('Delete this payment record?')) return;
     try {
       const res = await fetch(`/api/debts/${debtId}/payments/${paymentId}`, { method: 'DELETE' });
@@ -176,6 +203,7 @@ export default function DebtDetailClient({ user, debtId }) {
   };
 
   const handleMarkCleared = async () => {
+    if (readOnly) return;
     if (!await appConfirm('Mark this debt as fully cleared?')) return;
     const res = await fetch(`/api/debts/${debtId}`, {
       method: 'PATCH',
@@ -187,6 +215,7 @@ export default function DebtDetailClient({ user, debtId }) {
   };
 
   const handleDeleteDebt = async () => {
+    if (readOnly) return;
     if (!await appConfirm('Delete this debt permanently? All payment records will also be deleted.')) return;
     const res = await fetch(`/api/debts/${debtId}`, { method: 'DELETE' });
     if (res.ok) { toast('Debt deleted.', 'info'); router.push('/debts'); }
@@ -195,6 +224,7 @@ export default function DebtDetailClient({ user, debtId }) {
 
   const handleEditSubmit = async (e) => {
     e.preventDefault();
+    if (readOnly) return;
     setEError('');
     setESaving(true);
     try {
@@ -275,20 +305,20 @@ export default function DebtDetailClient({ user, debtId }) {
 
   if (loading) {
     return (
-      <Shell user={user}>
+      <DetailFrame readOnly={readOnly} user={user}>
         <div className="p-5 space-y-3">
           <div className="h-6 w-40 bg-paper-tint rounded animate-pulse" />
           <div className="h-32 bg-paper-tint rounded-2xl animate-pulse" />
         </div>
-      </Shell>
+      </DetailFrame>
     );
   }
 
   if (!debt) {
     return (
-      <Shell user={user}>
+      <DetailFrame readOnly={readOnly} user={user}>
         <div className="p-5 text-center text-ink-mute">Debt not found.</div>
-      </Shell>
+      </DetailFrame>
     );
   }
 
@@ -350,8 +380,17 @@ via My Debt Tracker`;
   const barMaxVal = Math.max(Number(debt.principal), Number(debt.total_paid || 0), 1);
 
   return (
-    <Shell user={user}>
+    <DetailFrame readOnly={readOnly} user={user}>
       <div className="px-4 md:px-8 py-5 md:py-6 max-w-3xl mx-auto w-full space-y-5">
+        {readOnly && (
+          <>
+            <Link href={backHref} className="text-xs text-ink-soft inline-block">← Back to debts</Link>
+            <div className="rounded-xl border border-edge bg-paper-tint px-4 py-3">
+              <p className="text-sm font-medium">View only</p>
+              <p className="text-xs text-ink-soft mt-1">These details match the owner&apos;s record. Changes are turned off.</p>
+            </div>
+          </>
+        )}
 
         {/* Header */}
         <div className="flex items-start justify-between gap-3">
@@ -388,6 +427,7 @@ via My Debt Tracker`;
               {debt.notes ? ` · ${debt.notes}` : ''}
             </p>
           </div>
+          {!readOnly && (
           <div className="flex gap-2">
             {/* Edit button */}
             <button onClick={() => setShowEdit(v => !v)}
@@ -437,17 +477,20 @@ via My Debt Tracker`;
               </svg>
             </button>
           </div>
+          )}
         </div>
 
         {debt.urgency_status !== 'none' && (
           <div className={`rounded-2xl border px-4 py-3 ${debt.urgency_status === 'overdue' ? 'bg-danger/10 border-danger/20 text-danger' : 'bg-honey-50 border-honey-600/20 text-honey-600'}`}>
             <p className="text-sm font-medium">{debt.urgency_message}</p>
-            <p className="text-xs mt-1">Target date: {fmtDate(debt.target_date)}. Update the target or clear the debt to remove this alert.</p>
+            <p className="text-xs mt-1">
+              Target date: {fmtDate(debt.target_date)}.{readOnly ? '' : ' Update the target or clear the debt to remove this alert.'}
+            </p>
           </div>
         )}
 
         {/* Edit debt form */}
-        {showEdit && (
+        {!readOnly && showEdit && (
           <form onSubmit={handleEditSubmit}
             className="bg-paper-card border border-edge rounded-2xl p-4 space-y-4 anim-fade">
             <h3 className="text-sm font-medium">Edit debt details</h3>
@@ -742,6 +785,7 @@ via My Debt Tracker`;
         </div>
 
         {/* Payment actions */}
+        {!readOnly && (
         <div className="flex gap-2 flex-wrap">
           <button
             onClick={() => setShowForm(v => !v)}
@@ -755,9 +799,10 @@ via My Debt Tracker`;
             </button>
           )}
         </div>
+        )}
 
         {/* Payment form */}
-        {showForm && (
+        {!readOnly && showForm && (
           <form onSubmit={handlePaymentSubmit}
             className="bg-paper-card border border-edge rounded-2xl p-4 space-y-4 anim-fade">
             <h3 className="text-sm font-medium">Record debt entry</h3>
@@ -891,6 +936,7 @@ via My Debt Tracker`;
                     </div>
                     <div className="flex items-center gap-2 flex-shrink-0">
                       <span className="text-sm font-medium">{inr(p.amount)}</span>
+                      {!readOnly && (
                       <button
                         onClick={() => handleDeletePayment(p.id)}
                         className="w-6 h-6 rounded flex items-center justify-center text-ink-mute hover:text-danger hover:bg-danger/10 transition"
@@ -899,6 +945,7 @@ via My Debt Tracker`;
                           <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
                         </svg>
                       </button>
+                      )}
                     </div>
                   </div>
                 );
@@ -912,13 +959,14 @@ via My Debt Tracker`;
           <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
             <div ref={shareRef} className="min-w-0 flex-1 space-y-3">
               <div className="flex items-center justify-between gap-3">
-                <h2 className="text-sm font-medium">Shareable summary</h2>
-                <span className="text-[11px] text-ink-mute">Shareable as image</span>
+                <h2 className="text-sm font-medium">{readOnly ? 'Summary' : 'Shareable summary'}</h2>
+                {!readOnly && <span className="text-[11px] text-ink-mute">Shareable as image</span>}
               </div>
               <div className="font-mono text-xs bg-paper-tint rounded-xl p-3 whitespace-pre-wrap text-ink-soft select-all">
 {shareSummaryText}
               </div>
             </div>
+            {!readOnly && (
             <div className="flex flex-col gap-2 md:w-[220px]">
               <button onClick={handleCopyShareImage}
                 className="snapshot-action w-full rounded-xl px-3 py-2 text-xs font-medium">
@@ -936,10 +984,11 @@ via My Debt Tracker`;
                 Share image
               </button>
             </div>
+            )}
           </div>
         </section>
 
       </div>
-    </Shell>
+    </DetailFrame>
   );
 }

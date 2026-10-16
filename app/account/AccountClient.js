@@ -6,6 +6,7 @@ import Shell from '@/components/Shell';
 import PinInput from '@/components/PinInput';
 import { appConfirm } from '@/components/ConfirmDialog';
 import { toast } from '@/components/Toast';
+import ViewLinkSection from './ViewLinkSection';
 
 const AUTHENTICATOR_APPS = [
   {
@@ -376,6 +377,8 @@ export default function AccountClient({ user }) {
 
           {mfaError && !mfaSetupOpen && !mfaDisableOpen && <p className="px-4 pb-3 text-xs text-danger">{mfaError}</p>}
         </div>
+
+        <ViewLinkSection />
 
         <p className="text-[11px] tracking-wider text-ink-mute uppercase mb-2">Session</p>
         <div className="bg-paper-card border border-edge rounded-2xl mb-5">

@@ -27,12 +27,21 @@ function priorityLabel(value) {
   return `P${value}`;
 }
 
-export default function DebtsClient({ user }) {
-  const [debts, setDebts] = useState([]);
-  const [categories, setCategories] = useState([]);
-  const [instrumentTags, setInstrumentTags] = useState([]);
-  const [priorities, setPriorities] = useState([]);
-  const [loading, setLoading] = useState(true);
+export default function DebtsClient({
+  user,
+  readOnly = false,
+  linkBase = '/debts',
+  initialDebts = null,
+  initialCategories = null,
+  initialInstrumentTags = null,
+  initialPriorities = null,
+}) {
+  const seeded = Array.isArray(initialDebts);
+  const [debts, setDebts] = useState(seeded ? initialDebts : []);
+  const [categories, setCategories] = useState(seeded && Array.isArray(initialCategories) ? initialCategories : []);
+  const [instrumentTags, setInstrumentTags] = useState(seeded && Array.isArray(initialInstrumentTags) ? initialInstrumentTags : []);
+  const [priorities, setPriorities] = useState(seeded && Array.isArray(initialPriorities) ? initialPriorities : []);
+  const [loading, setLoading] = useState(!seeded && !readOnly);
   const [filter, setFilter] = useState('active'); // all | active | cleared
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
@@ -47,6 +56,7 @@ export default function DebtsClient({ user }) {
   const [bulkSaving, setBulkSaving] = useState(false);
 
   const loadDebts = useCallback(() => {
+    if (readOnly) return;
     setLoading(true);
     fetch('/api/debts')
       .then(r => r.json())
@@ -58,11 +68,21 @@ export default function DebtsClient({ user }) {
         setSelectedIds([]);
         setLoading(false);
       });
-  }, []);
+  }, [readOnly]);
 
   useEffect(() => {
+    if (readOnly && !seeded && process.env.NODE_ENV !== 'production') {
+      console.warn('DebtsClient: pass initialDebts when readOnly=true (view links have no auth for /api/debts).');
+    }
+  }, [readOnly, seeded]);
+
+  useEffect(() => {
+    if (seeded || readOnly) return undefined;
     loadDebts();
-  }, [loadDebts]);
+    return undefined;
+  }, [seeded, readOnly, loadDebts]);
+
+  const debtHref = (id) => (readOnly ? `${linkBase}/debts/${id}` : `/debts/${id}`);
 
   const alerts = useMemo(
     () => debts.filter((debt) => debt.status === 'active' && debt.urgency_status !== 'none'),
@@ -154,6 +174,7 @@ export default function DebtsClient({ user }) {
   };
 
   const handleBulkApply = async () => {
+    if (readOnly) return;
     if (!selectedIds.length) {
       toast('Select at least one debt.', 'error');
       return;
@@ -229,17 +250,18 @@ export default function DebtsClient({ user }) {
     }
   };
 
-  return (
-    <Shell user={user}>
+  const content = (
       <div className="px-4 md:px-8 py-5 md:py-6 max-w-5xl mx-auto w-full">
         <div className="flex items-center justify-between mb-4 gap-3">
           <div>
             <h1 className="text-xl font-medium">All debts</h1>
             <p className="text-xs text-ink-mute mt-1">Track category, payoff priority, and upcoming target alerts.</p>
           </div>
-          <Link href="/debts/new" className="btn-primary py-1.5 px-3 rounded-lg text-xs font-medium whitespace-nowrap">
-            + Add
-          </Link>
+          {!readOnly && (
+            <Link href="/debts/new" className="btn-primary py-1.5 px-3 rounded-lg text-xs font-medium whitespace-nowrap">
+              + Add
+            </Link>
+          )}
         </div>
 
         {alerts.length > 0 && (
@@ -247,7 +269,7 @@ export default function DebtsClient({ user }) {
             {alerts.slice(0, 3).map((debt) => (
               <Link
                 key={debt.id}
-                href={`/debts/${debt.id}`}
+                href={debtHref(debt.id)}
                 className={`block rounded-2xl border px-4 py-3 ${alertTone(debt.urgency_status)}`}
               >
                 <div className="flex items-start gap-3">
@@ -308,21 +330,24 @@ export default function DebtsClient({ user }) {
           <div className="flex gap-2 items-center">
             <button onClick={() => setViewMode('list')} className={`chip text-xs ${viewMode === 'list' ? 'on' : ''}`}>List view</button>
             <button onClick={() => setViewMode('tile')} className={`chip text-xs ${viewMode === 'tile' ? 'on' : ''}`}>Tile view</button>
-            <button
-              type="button"
-              onClick={handleCopyDebtsList}
-              className="snapshot-action flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-medium"
-              title="Copy debts list as image"
-            >
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-              </svg>
-              Copy this section
-            </button>
+            {!readOnly && (
+              <button
+                type="button"
+                onClick={handleCopyDebtsList}
+                className="snapshot-action flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-medium"
+                title="Copy debts list as image"
+              >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                </svg>
+                Copy this section
+              </button>
+            )}
           </div>
         </div>
 
+        {!readOnly && (
         <section className="bg-paper-card border border-edge rounded-2xl p-3.5 mb-4">
           <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-[auto,minmax(0,1fr),minmax(0,1fr),180px,180px,auto,auto] items-center">
             <label className="flex items-center gap-2 text-xs text-ink-soft">
@@ -369,6 +394,7 @@ export default function DebtsClient({ user }) {
             </button>
           </div>
         </section>
+        )}
 
         {loading && (
           <div className="space-y-3">
@@ -381,9 +407,11 @@ export default function DebtsClient({ user }) {
         {!loading && filtered.length === 0 && (
           <div className="text-center py-16">
             <p className="text-ink-mute text-sm mb-4">No debts found.</p>
-            <Link href="/debts/new" className="btn-primary py-2 px-5 rounded-lg text-sm inline-block">
-              Add a debt
-            </Link>
+            {!readOnly && (
+              <Link href="/debts/new" className="btn-primary py-2 px-5 rounded-lg text-sm inline-block">
+                Add a debt
+              </Link>
+            )}
           </div>
         )}
 
@@ -417,7 +445,7 @@ export default function DebtsClient({ user }) {
                     return (
                       <Link
                         key={debt.id}
-                        href={`/debts/${debt.id}`}
+                        href={debtHref(debt.id)}
                         className="block rounded-xl border border-edge px-3 py-2.5 hover:border-ink-soft transition"
                       >
                         <div className="flex items-start justify-between gap-3">
@@ -456,17 +484,19 @@ export default function DebtsClient({ user }) {
 
               return (
                 <div key={d.id} className="flex gap-2 items-start">
-                  <label className="mt-4">
-                    <input
-                      type="checkbox"
-                      checked={selectedIds.includes(d.id)}
-                      onChange={() => toggleSelectDebt(d.id)}
-                      className="accent-ink"
-                    />
-                  </label>
+                  {!readOnly && (
+                    <label className="mt-4">
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.includes(d.id)}
+                        onChange={() => toggleSelectDebt(d.id)}
+                        className="accent-ink"
+                      />
+                    </label>
+                  )}
                   <div className="flex-1">
                     <Link
-                      href={`/debts/${d.id}`}
+                      href={debtHref(d.id)}
                       className={`block bg-paper-card border border-edge rounded-2xl p-4 hover:border-ink-soft transition ${viewMode === 'tile' ? 'h-full' : ''}`}
                     >
                     <div className="flex items-start justify-between gap-3">
@@ -540,6 +570,8 @@ export default function DebtsClient({ user }) {
           </div>
         )}
       </div>
-    </Shell>
   );
+
+  if (readOnly) return content;
+  return <Shell user={user}>{content}</Shell>;
 }
